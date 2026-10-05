@@ -3,7 +3,7 @@ export const STUDIONET_CHAIN_ID_HEX = "0xF22F";
 export const STUDIONET_RPC_URL = "https://studio.genlayer.com/api";
 export const STUDIONET_EXPLORER_URL = "https://studio.genlayer.com";
 
-export const DEFAULT_CONTRACT_ADDRESS = "0x133f95019925c8fAC02BE0bD1b86F947AA50F13F";
+export const DEFAULT_CONTRACT_ADDRESS = "0x537e3D18c6B17b389bB5a15772FD0EC7F5Bb5A22";
 
 export const STUDIONET_CHAIN_CONFIG = {
   chainId: STUDIONET_CHAIN_ID_HEX,

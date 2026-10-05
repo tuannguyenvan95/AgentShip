@@ -61,7 +61,7 @@ class MaritimeVoyage:
     carrier: Address               # Shipowner / Shipping Line
     dispute_initiator: Address
     freight_amount: bigint         # Base shipping freight locked
-    demurrage_deposit: bigint      # Demurrage buffer deposit
+    demurrage_deposit: bigint      # Demurrage buffer deposit (from primary charterer)
     dispute_bond: bigint           # 10% appeal stake
     vessel_imo_number: str         # International Maritime Organization vessel identifier
     laytime_hours_allowed: u32     # Agreed loading/unloading hours (Laytime)
@@ -101,14 +101,14 @@ class Contract(gl.Contract):
     stats_demurrage_fault: TreeMap[str, u32]
     stats_appeals_won: TreeMap[str, u32]
     stats_appeals_lost: TreeMap[str, u32]
-    registered_registry: TreeMap[str, str]       # "all" -> comma-separated addresses
+    registered_registry: TreeMap[str, str]
 
     # Milestone v3: Syndicate Co-Funding JSON (Voyage ID -> Serialized JSON array of pledges)
     syndicate_pledges_json: TreeMap[u64, str]
 
     def __init__(self):
-        deployer = _get_sender()
-        self.owner = deployer
+        # GenVM auto-initializes TreeMap and DynArray. Do not call _get_sender() here.
+        self.owner = Address(ZERO_ADDRESS)
         self.total_maritime_locked = bigint(0)
         self.total_voyages_settled = u32(0)
         self.voyage_counter = u64(0)
@@ -123,7 +123,6 @@ class Contract(gl.Contract):
     # ── Reputation Management Internal Helpers ─────────────────────────
 
     def _touch_participant(self, addr_str: str) -> None:
-        """Register participant address if not already tracked in registry."""
         if addr_str == ZERO_ADDRESS or len(addr_str) < 10:
             return
         current = self.registered_registry.get("all", "")
@@ -137,9 +136,8 @@ class Contract(gl.Contract):
         return [p for p in current.split(",") if p]
 
     def _add_reputation(self, addr_str: str, points: int) -> None:
-        """Safely reward or penalize participant reputation on-chain."""
         self._touch_participant(addr_str)
-        current = self.reputation_scores.get(addr_str, bigint(10))  # Start newcomers at 10 pts
+        current = self.reputation_scores.get(addr_str, bigint(10))
         new_score = current + bigint(points)
         if new_score < bigint(0):
             new_score = bigint(0)
@@ -156,7 +154,6 @@ class Contract(gl.Contract):
         return TIER_BRONZE
 
     def _is_fast_track_eligible(self, charterer_str: str, carrier_str: str) -> bool:
-        """Fast-track 12-block adjudication applies if carrier or charterer is Gold or Platinum."""
         c_tier = self._get_reputation_tier(carrier_str)
         sh_tier = self._get_reputation_tier(charterer_str)
         return (c_tier in [TIER_GOLD, TIER_PLATINUM]) or (sh_tier in [TIER_GOLD, TIER_PLATINUM])
@@ -171,9 +168,6 @@ class Contract(gl.Contract):
         demurrage_buffer_wei: bigint,
         duration_blocks: int
     ) -> u64:
-        """
-        Charterer creates voyage booking, depositing base freight and a demurrage buffer.
-        """
         self._ensure_owner()
         total_deposit = bigint(gl.message.value)
         if total_deposit <= demurrage_buffer_wei or demurrage_buffer_wei <= bigint(0):
@@ -225,10 +219,10 @@ class Contract(gl.Contract):
         self.voyage_ids.append(voyage_id)
         self.total_maritime_locked = self.total_maritime_locked + total_deposit
 
-        # Record primary charterer pledge in syndicate records
+        # Record primary charterer freight portion in syndicate records
         pledge_entry = {
             "funder": _addr_str(charterer_addr),
-            "amount": str(total_deposit),
+            "amount": str(freight),
             "role": "CHARTERER_PRIMARY"
         }
         self.syndicate_pledges_json[voyage_id] = json.dumps([pledge_entry])
@@ -237,10 +231,6 @@ class Contract(gl.Contract):
 
     @gl.public.write.payable
     def pledge_voyage_escrow(self, voyage_id: u64) -> None:
-        """
-        Milestone v3: Syndicate Co-Funding Pool.
-        Allows cargo co-shippers / logistics syndicates to pool funds into an active open voyage.
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -278,9 +268,6 @@ class Contract(gl.Contract):
         ais_tracking_url: str,
         marine_weather_url: str
     ) -> None:
-        """
-        Carrier accepts the voyage and submits verified AIS telemetry & oceanic weather links.
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -310,12 +297,6 @@ class Contract(gl.Contract):
 
     @gl.public.write
     def adjudicate_demurrage(self, voyage_id: u64) -> None:
-        """
-        AI Maritime Tribunal consensus:
-        Renders AIS tracking and oceanic weather telemetry.
-        Determines whether delays are due to carrier breach, port congestion, or Force Majeure weather.
-        Evaluates Fast-Track 12-block qualification based on participant trust tier.
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -385,8 +366,8 @@ EVALUATION RUBRIC:
 3. Check for severe storms, hurricane tracks, or closed port conditions (Force Majeure).
 4. Verdict Rules:
    - If measured_delay_hours == 0: Output "CLEAN_ON_TIME".
-   - If measured_delay_hours > 0 AND max_wave_height_meters >= 6 (Severe sea state / storm): Output "FORCE_MAJEURE_EXCUSED" (Weather exception applies).
-   - If measured_delay_hours > 0 AND max_wave_height_meters < 6: Output "DEMURRAGE_ENFORCED" (Unexcused port or transit delay).
+   - If measured_delay_hours > 0 AND max_wave_height_meters >= 6: Output "FORCE_MAJEURE_EXCUSED".
+   - If measured_delay_hours > 0 AND max_wave_height_meters < 6: Output "DEMURRAGE_ENFORCED".
 
 SECURITY CANARY: Echo "{CANARY_TOKEN}" in JSON.
 
@@ -477,15 +458,10 @@ Respond ONLY with valid JSON without markdown fences:
         v.status = STATUS_AWAITING_PAYOUT
         v.audit_completed_block = current_block
 
-        # Milestone v3: Determine if eligible for 12-block Fast-Track
         v.is_fast_track = self._is_fast_track_eligible(_addr_str(v.charterer), _addr_str(v.carrier))
 
     @gl.public.write.payable
     def appeal_verdict(self, voyage_id: u64, dispute_reason: str) -> None:
-        """
-        Charterer or Carrier can appeal within the cooling-off window with a 10% bond.
-        Cooling-off window is 12 blocks for Fast-Track (Gold/Platinum), 24 blocks standard.
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -526,10 +502,6 @@ Respond ONLY with valid JSON without markdown fences:
 
     @gl.public.write
     def adjudicate_appeal(self, voyage_id: u64, supplemental_log_url: str) -> None:
-        """
-        Appellate Admiralty Court reviews supplemental harbor master records & sea state logs.
-        Applies reputation point updates to winners & losers (Milestone v3).
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -628,12 +600,10 @@ Respond ONLY with valid JSON:
             v.status = STATUS_SETTLED_FORCE_MAJEURE
             v.verdict = "FORCE_MAJEURE_EXCUSED"
             v.reason = f"[APPEAL UPHELD] {app_reason}"
-            # Force Majeure: Base freight to carrier, demurrage buffer refunded to charterer
             _pay_native(v.carrier, freight_val)
             _pay_native(v.charterer, demurrage_val)
             _pay_native(appellant, bond_val)
 
-            # Reputation: Appellant won (+15), counterparty (-5)
             self._add_reputation(appellant_str, 15)
             self.stats_appeals_won[appellant_str] = self.stats_appeals_won.get(appellant_str, u32(0)) + u32(1)
             self.stats_appeals_lost[counterparty_str] = self.stats_appeals_lost.get(counterparty_str, u32(0)) + u32(1)
@@ -646,7 +616,6 @@ Respond ONLY with valid JSON:
             _pay_native(v.charterer, demurrage_val)
             _pay_native(appellant, bond_val)
 
-            # Reputation: Appellant won (+15), counterparty (-5)
             self._add_reputation(appellant_str, 15)
             self.stats_appeals_won[appellant_str] = self.stats_appeals_won.get(appellant_str, u32(0)) + u32(1)
             self.stats_appeals_lost[counterparty_str] = self.stats_appeals_lost.get(counterparty_str, u32(0)) + u32(1)
@@ -655,11 +624,9 @@ Respond ONLY with valid JSON:
             v.status = STATUS_SETTLED_DEMURRAGE
             v.verdict = "DEMURRAGE_ENFORCED"
             v.reason = f"[APPEAL DISMISSED] {app_reason}"
-            # Demurrage enforced: Carrier receives freight + demurrage buffer; losing bond to counterparty
             _pay_native(v.carrier, freight_val + demurrage_val)
             _pay_native(counterparty, bond_val)
 
-            # Reputation: Appellant lost frivolous appeal (-15), counterparty (+10)
             self._add_reputation(appellant_str, -15)
             self._add_reputation(counterparty_str, 10)
             self.stats_appeals_lost[appellant_str] = self.stats_appeals_lost.get(appellant_str, u32(0)) + u32(1)
@@ -667,11 +634,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.write
     def finalize_settlement(self, voyage_id: u64) -> None:
-        """
-        Executes un-disputed payout strictly after cooling-off window.
-        12 blocks for Fast-Track (Gold/Platinum), 24 blocks standard.
-        Updates on-chain reputation stats (Milestone v3).
-        """
         self._ensure_owner()
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
@@ -707,7 +669,6 @@ Respond ONLY with valid JSON:
 
         if v.verdict == "DEMURRAGE_ENFORCED":
             v.status = STATUS_SETTLED_DEMURRAGE
-            # Carrier receives both freight and demurrage buffer
             _pay_native(v.carrier, freight_val + demurrage_val)
             self._add_reputation(carrier_str, 5)
             self._add_reputation(charterer_str, -5)
@@ -716,17 +677,16 @@ Respond ONLY with valid JSON:
 
         elif v.verdict == "FORCE_MAJEURE_EXCUSED" or v.verdict == "CLEAN_ON_TIME":
             v.status = STATUS_SETTLED_FORCE_MAJEURE if v.verdict == "FORCE_MAJEURE_EXCUSED" else STATUS_SETTLED_ON_TIME
-            # Carrier gets freight, charterer gets demurrage buffer back
             _pay_native(v.carrier, freight_val)
             _pay_native(v.charterer, demurrage_val)
 
             if v.verdict == "CLEAN_ON_TIME":
-                self._add_reputation(carrier_str, 15)  # On-time delivery bonus
+                self._add_reputation(carrier_str, 15)
                 self._add_reputation(charterer_str, 10)
                 self.stats_completed[carrier_str] = self.stats_completed.get(carrier_str, u32(0)) + u32(1)
                 self.stats_completed[charterer_str] = self.stats_completed.get(charterer_str, u32(0)) + u32(1)
             else:
-                self._add_reputation(carrier_str, 10)  # Safe navigation during Force Majeure
+                self._add_reputation(carrier_str, 10)
                 self._add_reputation(charterer_str, 10)
                 self.stats_force_majeure[carrier_str] = self.stats_force_majeure.get(carrier_str, u32(0)) + u32(1)
         else:
@@ -737,7 +697,7 @@ Respond ONLY with valid JSON:
     def cancel_or_reclaim(self, voyage_id: u64) -> None:
         """
         Charterer reclaims escrow if booking expired unclaimed or carrier abandoned (>150 blocks).
-        Milestone v3: Executes proportional refund across syndicate co-funders without rounding loss.
+        Safely refunds demurrage buffer to primary charterer and proportional freight to all co-funders.
         """
         self._ensure_owner()
         if voyage_id not in self.voyages:
@@ -763,11 +723,17 @@ Respond ONLY with valid JSON:
         v.verdict = "CANCELLED"
         v.reason = "Voyage cancelled and escrow refunded proportionally to participants."
 
-        total_escrow = v.freight_amount + v.demurrage_deposit
+        freight_val = v.freight_amount
+        demurrage_val = v.demurrage_deposit
+        total_escrow = freight_val + demurrage_val
         self.total_maritime_locked = self.total_maritime_locked - total_escrow
 
-        # Proportional syndicate refund
+        # 1. Demurrage buffer is always 100% refunded to the primary charterer
+        _pay_native(v.charterer, demurrage_val)
+
+        # 2. Freight amount is refunded to syndicate co-funders
         pledges_raw = self.syndicate_pledges_json.get(voyage_id, "[]")
+        refunded_via_syndicate = False
         try:
             p_list = json.loads(pledges_raw)
             if len(p_list) > 0:
@@ -775,11 +741,12 @@ Respond ONLY with valid JSON:
                     f_addr = Address(p_obj["funder"])
                     amt = bigint(int(p_obj["amount"]))
                     _pay_native(f_addr, amt)
-                return
+                refunded_via_syndicate = True
         except Exception:
             pass
 
-        _pay_native(v.charterer, total_escrow)
+        if not refunded_via_syndicate:
+            _pay_native(v.charterer, freight_val)
 
     # ── Read-only Views ───────────────────────────────────────────────
 
@@ -867,9 +834,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.view
     def get_reputation_profile(self, user_address: Address) -> str:
-        """
-        Milestone v3 View: Inspect detailed maritime trust dossier for any carrier or charterer.
-        """
         u_str = _addr_str(user_address)
         score = int(self.reputation_scores.get(u_str, bigint(10)))
         tier = self._get_reputation_tier(u_str)
@@ -891,9 +855,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.view
     def get_maritime_leaderboard(self) -> str:
-        """
-        Milestone v3 View: Global Admiralty Leaderboard of top maritime carriers and shippers.
-        """
         participants = self._get_all_participants()
         board = []
         for reg in participants:
@@ -909,9 +870,6 @@ Respond ONLY with valid JSON:
 
     @gl.public.view
     def get_voyage_pledges(self, voyage_id: u64) -> str:
-        """
-        Milestone v3 View: Inspect syndicate co-funding pledges for a voyage.
-        """
         if voyage_id not in self.voyages:
             raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
 

@@ -1,9 +1,8 @@
 {
-  "contract_address": "0x133f95019925c8fAC02BE0bD1b86F947AA50F13F",
-  "tx_hash": "0x1033f998fa84e2cbdd3b3e53fde6226f76dc78bd4f5fc9fcfcaad3aaa16af875",
+  "contract_address": "0x537e3D18c6B17b389bB5a15772FD0EC7F5Bb5A22",
+  "tx_hash": "0xf8099d796e3f8d9abe0f8b9e4f5f77c24d0c94bea4f08ba96c485396c0cb6c0e",
   "deployer": "0xF34587A45C397281Ef6BDd839d4A1de2DEe393ad",
   "network": "studionet",
   "chain_id": 61999,
-  "chain_id_hex": "0xF22F",
-  "rpc_url": "https://studio.genlayer.com/api"
+  "chain_id_hex": "0xF22F"
 }
