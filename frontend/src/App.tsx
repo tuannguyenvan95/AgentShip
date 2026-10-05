@@ -20,6 +20,8 @@ import { AdmiraltyInspectorModal } from './components/AdmiraltyInspectorModal';
 import { AppealModal } from './components/AppealModal';
 import { SyndicateModal } from './components/SyndicateModal';
 import { LeaderboardDrawer } from './components/LeaderboardDrawer';
+import { CockpitConsole } from './components/CockpitConsole';
+import { MaritimeTickerRibbon } from './components/MaritimeTickerRibbon';
 import {
   MaritimeVoyage,
   ContractStats,
@@ -40,6 +42,11 @@ export const App: React.FC = () => {
   const [account, setAccount] = useState<string | null>(null);
   const [balance, setBalance] = useState<string>('0');
   const [chainId, setChainId] = useState<number | null>(null);
+
+  // Layout & Theme state
+  const [layoutMode, setLayoutMode] = useState<'cockpit' | 'grid'>('cockpit');
+  const [isDarkTheme, setIsDarkTheme] = useState<boolean>(true);
+  const [selectedVoyage, setSelectedVoyage] = useState<MaritimeVoyage | null>(null);
 
   // Contract data
   const [stats, setStats] = useState<ContractStats | null>(null);
@@ -121,6 +128,11 @@ export const App: React.FC = () => {
       const voyagesData = await callContractView('get_all_voyages', []);
       if (Array.isArray(voyagesData)) {
         setVoyages(voyagesData);
+        setSelectedVoyage((prev) =>
+          prev
+            ? (voyagesData.find((v) => v.voyage_id === prev.voyage_id) ?? voyagesData[0])
+            : voyagesData[0]
+        );
       }
 
       // 3. Fetch Leaderboard
@@ -349,12 +361,20 @@ export const App: React.FC = () => {
   const activeInTransitCount = voyages.filter((v) => v.status === 1).length;
 
   return (
-    <div className="min-h-screen bg-slate-100/60 text-slate-900 font-sans antialiased selection:bg-ocean-100 selection:text-ocean-900">
+    <div
+      className={`min-h-screen font-sans antialiased selection:bg-ocean-500 selection:text-white transition-colors duration-200 ${
+        isDarkTheme ? 'bg-slate-950 text-slate-100' : 'bg-slate-100/70 text-slate-900'
+      }`}
+    >
       {/* Navigation */}
       <Navbar
         account={account}
         balance={balance}
         chainId={chainId}
+        layoutMode={layoutMode}
+        isDarkTheme={isDarkTheme}
+        onToggleLayout={() => setLayoutMode((m) => (m === 'cockpit' ? 'grid' : 'cockpit'))}
+        onToggleTheme={() => setIsDarkTheme((t) => !t)}
         onConnect={connectWallet}
         onSwitchNetwork={switchNetwork}
         onOpenCreate={() => setIsCreateOpen(true)}
@@ -363,131 +383,206 @@ export const App: React.FC = () => {
         isRefreshing={isRefreshing}
       />
 
+      {/* Live Oceanic Telemetry Ribbon */}
+      <MaritimeTickerRibbon />
+
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Banner Notification */}
         {notification && (
           <div
             className={`mb-6 p-4 rounded-2xl border flex items-center justify-between text-xs sm:text-sm animate-in fade-in slide-in-from-top-2 duration-200 ${
               notification.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                ? isDarkTheme
+                  ? 'bg-emerald-950/60 border-emerald-800 text-emerald-200'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
                 : notification.type === 'error'
-                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                ? isDarkTheme
+                  ? 'bg-rose-950/60 border-rose-800 text-rose-200'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+                : isDarkTheme
+                ? 'bg-sky-950/60 border-sky-800 text-sky-200'
                 : 'bg-blue-50 border-blue-200 text-blue-800'
             }`}
           >
             <div className="flex items-center space-x-2">
               {notification.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
               ) : notification.type === 'error' ? (
-                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
               ) : (
-                <Info className="w-5 h-5 text-blue-600 shrink-0" />
+                <Info className="w-5 h-5 text-sky-500 shrink-0" />
               )}
               <span>{notification.message}</span>
             </div>
             <button
               onClick={() => setNotification(null)}
-              className="text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1"
+              className="text-slate-400 hover:text-slate-200 text-xs font-bold px-2 py-1"
             >
               Dismiss
             </button>
           </div>
         )}
 
-        {/* Hero Headline */}
-        <div className="mb-8">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-navy-900 text-white text-xs font-semibold uppercase tracking-wider mb-3 shadow-2xs">
-            <Anchor className="w-3.5 h-3.5 text-sky-400" />
-            <span>Autonomous Admiralty Jurisdiction</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold font-space text-navy-900 tracking-tight">
-            Maritime Demurrage & Weather Risk Court
-          </h1>
-          <p className="text-base text-slate-600 mt-2 max-w-3xl">
-            Decentralized laytime contract escrow with AI subjective consensus evaluating live AIS satellite telemetry and oceanic NOAA weather stations to adjudicate Force Majeure storm waivers and delay penalties.
-          </p>
-        </div>
-
-        {/* Protocol Statistics */}
-        <StatsOverview stats={stats} activeCount={activeInTransitCount} />
-
-        {/* Filter Controls & Search */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs mb-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Status Tabs */}
-          <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
-            {[
-              { id: 'ALL', label: 'All Voyages' },
-              { id: 'OPEN', label: 'Open Escrows' },
-              { id: 'TRANSIT', label: 'In Transit' },
-              { id: 'PAYOUT', label: 'Awaiting Payout' },
-              { id: 'DISPUTED', label: 'Disputed' },
-              { id: 'SETTLED', label: 'Settled' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveFilter(tab.id)}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
-                  activeFilter === tab.id
-                    ? 'bg-navy-900 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-navy-900 hover:bg-slate-100'
+        {layoutMode === 'cockpit' ? (
+          /* Alternate UI: 3-Panel Tactical Oceanic Radar Cockpit */
+          <CockpitConsole
+            voyages={filteredVoyages}
+            selectedVoyage={selectedVoyage || filteredVoyages[0] || null}
+            onSelectVoyage={setSelectedVoyage}
+            currentAccount={account}
+            leaderboard={leaderboard}
+            userProfile={userProfile}
+            onOpenTelemetry={openTelemetryModal}
+            onOpenInspector={openInspectorModal}
+            onOpenAppeal={openAppealModal}
+            onOpenSyndicate={openSyndicateModal}
+            onAdjudicate={handleAdjudicateDemurrage}
+            onFinalize={handleFinalizeSettlement}
+            isLoadingAction={isLoadingAction}
+            isDarkTheme={isDarkTheme}
+          />
+        ) : (
+          /* Classic Layout: Oceanic Grid & Cards */
+          <>
+            {/* Hero Headline */}
+            <div className="mb-8">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-navy-900 text-white text-xs font-semibold uppercase tracking-wider mb-3 shadow-2xs">
+                <Anchor className="w-3.5 h-3.5 text-sky-400" />
+                <span>Autonomous Admiralty Jurisdiction</span>
+              </div>
+              <h1
+                className={`text-3xl sm:text-4xl font-extrabold font-space tracking-tight ${
+                  isDarkTheme ? 'text-white' : 'text-navy-900'
                 }`}
               >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search Bar */}
-          <div className="relative w-full md:w-72">
-            <input
-              type="text"
-              placeholder="Search by IMO or Address..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/60"
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          </div>
-        </div>
-
-        {/* Voyages Grid */}
-        {filteredVoyages.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
-            <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
-              <Ship className="w-8 h-8" />
+                Maritime Demurrage & Weather Risk Court
+              </h1>
+              <p
+                className={`text-base mt-2 max-w-3xl ${
+                  isDarkTheme ? 'text-slate-400' : 'text-slate-600'
+                }`}
+              >
+                Decentralized laytime contract escrow with AI subjective consensus evaluating live
+                AIS satellite telemetry and oceanic NOAA weather stations to adjudicate Force
+                Majeure storm waivers and delay penalties.
+              </p>
             </div>
-            <h3 className="font-space font-bold text-lg text-navy-900 mb-1">
-              No Voyages Match Your Criteria
-            </h3>
-            <p className="text-sm text-slate-500 max-w-md mx-auto mb-5">
-              Create a new maritime booking escrow to start monitoring vessel laytime and ocean weather on GenLayer.
-            </p>
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-navy-900 hover:bg-navy-950 rounded-xl shadow-sm transition-colors"
+
+            {/* Protocol Statistics */}
+            <StatsOverview stats={stats} activeCount={activeInTransitCount} />
+
+            {/* Filter Controls & Search */}
+            <div
+              className={`p-4 rounded-2xl border shadow-xs mb-6 flex flex-col md:flex-row items-center justify-between gap-4 ${
+                isDarkTheme
+                  ? 'bg-slate-900/90 border-slate-800'
+                  : 'bg-white border-slate-200'
+              }`}
             >
-              Book Voyage Escrow
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredVoyages.map((voyage) => (
-              <VoyageCard
-                key={voyage.voyage_id}
-                voyage={voyage}
-                currentAccount={account}
-                onOpenTelemetry={openTelemetryModal}
-                onOpenInspector={openInspectorModal}
-                onOpenAppeal={openAppealModal}
-                onOpenSyndicate={openSyndicateModal}
-                onAdjudicate={handleAdjudicateDemurrage}
-                onFinalize={handleFinalizeSettlement}
-                onCancel={handleCancelOrReclaim}
-                isLoadingAction={isLoadingAction}
-              />
-            ))}
-          </div>
+              {/* Status Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 w-full md:w-auto">
+                {[
+                  { id: 'ALL', label: 'All Voyages' },
+                  { id: 'OPEN', label: 'Open Escrows' },
+                  { id: 'TRANSIT', label: 'In Transit' },
+                  { id: 'PAYOUT', label: 'Awaiting Payout' },
+                  { id: 'DISPUTED', label: 'Disputed' },
+                  { id: 'SETTLED', label: 'Settled' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveFilter(tab.id)}
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all ${
+                      activeFilter === tab.id
+                        ? isDarkTheme
+                          ? 'bg-sky-500 text-slate-950 font-bold shadow-xs'
+                          : 'bg-navy-900 text-white shadow-xs'
+                        : isDarkTheme
+                        ? 'text-slate-400 hover:text-white hover:bg-slate-800'
+                        : 'text-slate-600 hover:text-navy-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative w-full md:w-72">
+                <input
+                  type="text"
+                  placeholder="Search by IMO or Address..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className={`w-full pl-9 pr-4 py-2 text-xs font-mono border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 ${
+                    isDarkTheme
+                      ? 'bg-slate-950 border-slate-700 text-slate-100 placeholder-slate-500'
+                      : 'bg-slate-50/60 border-slate-200 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              </div>
+            </div>
+
+            {/* Voyages Grid */}
+            {filteredVoyages.length === 0 ? (
+              <div
+                className={`rounded-2xl border p-12 text-center shadow-xs ${
+                  isDarkTheme
+                    ? 'bg-slate-900/60 border-slate-800'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <div
+                  className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+                    isDarkTheme ? 'bg-slate-800 text-slate-400' : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  <Ship className="w-8 h-8" />
+                </div>
+                <h3
+                  className={`font-space font-bold text-lg mb-1 ${
+                    isDarkTheme ? 'text-white' : 'text-navy-900'
+                  }`}
+                >
+                  No Voyages Match Your Criteria
+                </h3>
+                <p
+                  className={`text-sm max-w-md mx-auto mb-5 ${
+                    isDarkTheme ? 'text-slate-400' : 'text-slate-500'
+                  }`}
+                >
+                  Create a new maritime booking escrow to start monitoring vessel laytime and ocean
+                  weather on GenLayer.
+                </p>
+                <button
+                  onClick={() => setIsCreateOpen(true)}
+                  className="px-5 py-2.5 text-sm font-semibold text-white bg-sky-600 hover:bg-sky-500 rounded-xl shadow-sm transition-colors"
+                >
+                  Book Voyage Escrow
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredVoyages.map((voyage) => (
+                  <VoyageCard
+                    key={voyage.voyage_id}
+                    voyage={voyage}
+                    currentAccount={account}
+                    onOpenTelemetry={openTelemetryModal}
+                    onOpenInspector={openInspectorModal}
+                    onOpenAppeal={openAppealModal}
+                    onOpenSyndicate={openSyndicateModal}
+                    onAdjudicate={handleAdjudicateDemurrage}
+                    onFinalize={handleFinalizeSettlement}
+                    onCancel={handleCancelOrReclaim}
+                    isLoadingAction={isLoadingAction}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
 
