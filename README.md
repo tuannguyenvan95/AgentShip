@@ -4,7 +4,7 @@
 > **Target Network:** GenLayer StudioNet (Chain ID: `61999` / Hex: `0xF22F`, RPC: `https://studio.genlayer.com/api`)  
 > **Deployed Intelligent Contract (v3.0):** [`0x133f95019925c8fAC02BE0bD1b86F947AA50F13F`](https://studio.genlayer.com)  
 > **GitHub Repository:** [https://github.com/tuannguyenvan95/AgentShip](https://github.com/tuannguyenvan95/AgentShip)  
-> **Live Production dApp:** [https://agentship.vercel.app](https://agentship.vercel.app)  
+> **Live Production dApp:** [https://frontend-three-drab-v46xpao16q.vercel.app](https://frontend-three-drab-v46xpao16q.vercel.app) (Mirror: [https://frontend-2cd2gr7xl-tynamy.vercel.app](https://frontend-2cd2gr7xl-tynamy.vercel.app))  
 
 ---
 
