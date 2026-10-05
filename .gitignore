@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+artifacts/
+*.env
+
+# Node
+node_modules/
+dist/
+.vite/
+*.log
+
+# System
+.DS_Store
+Thumbs.db
