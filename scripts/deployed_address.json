@@ -1,7 +1,5 @@
 {
-  "contract_address": "0x537e3D18c6B17b389bB5a15772FD0EC7F5Bb5A22",
-  "tx_hash": "0xf8099d796e3f8d9abe0f8b9e4f5f77c24d0c94bea4f08ba96c485396c0cb6c0e",
-  "deployer": "0xF34587A45C397281Ef6BDd839d4A1de2DEe393ad",
+  "contract_address": "0xcCCbA20F2FFB4De780d694fe3759ecd1dfFBdDB2",
   "network": "studionet",
   "chain_id": 61999,
   "chain_id_hex": "0xF22F"
