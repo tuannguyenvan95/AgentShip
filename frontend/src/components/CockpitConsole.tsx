@@ -169,6 +169,26 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
                   Charterer: {formatAddress(activeVoyage.charterer)} • Carrier:{' '}
                   {formatAddress(activeVoyage.carrier)}
                 </p>
+                {currentAccount && (
+                  <div className="mt-1 flex items-center space-x-1.5">
+                    {currentAccount.toLowerCase() === activeVoyage.charterer.toLowerCase() && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/40">
+                        YOUR ROLE: CHARTERER (Cargo Owner)
+                      </span>
+                    )}
+                    {currentAccount.toLowerCase() === activeVoyage.carrier.toLowerCase() && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        YOUR ROLE: CARRIER (Vessel Owner)
+                      </span>
+                    )}
+                    {currentAccount.toLowerCase() !== activeVoyage.charterer.toLowerCase() &&
+                      currentAccount.toLowerCase() !== activeVoyage.carrier.toLowerCase() && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-slate-700">
+                          OBSERVER / SYNDICATE
+                        </span>
+                      )}
+                  </div>
+                )}
               </div>
 
               <div className="text-right">
@@ -270,6 +290,7 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
                   <button
                     onClick={() => onOpenSyndicate(activeVoyage)}
                     className="px-3 py-2 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center space-x-1.5"
+                    title="Co-fund cargo freight via syndicate pool"
                   >
                     <Users className="w-3.5 h-3.5 text-sky-400" />
                     <span>Co-Fund Syndicate</span>
@@ -277,10 +298,32 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
 
                   <button
                     onClick={() => onOpenTelemetry(activeVoyage)}
-                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-sky-600 hover:bg-sky-500 text-white shadow-sm transition-colors flex items-center space-x-1.5"
+                    disabled={
+                      Boolean(
+                        currentAccount &&
+                          currentAccount.toLowerCase() === activeVoyage.charterer.toLowerCase()
+                      )
+                    }
+                    className={`px-4 py-2 text-xs font-semibold rounded-xl shadow-sm transition-colors flex items-center space-x-1.5 ${
+                      currentAccount &&
+                      currentAccount.toLowerCase() === activeVoyage.charterer.toLowerCase()
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                        : 'bg-sky-600 hover:bg-sky-500 text-white'
+                    }`}
+                    title={
+                      currentAccount &&
+                      currentAccount.toLowerCase() === activeVoyage.charterer.toLowerCase()
+                        ? 'Charterer cannot act as Carrier for their own voyage'
+                        : 'Carrier: Accept booking & submit verified AIS telemetry'
+                    }
                   >
                     <Ship className="w-3.5 h-3.5" />
-                    <span>Carrier: Link AIS Telemetry</span>
+                    <span>
+                      {currentAccount &&
+                      currentAccount.toLowerCase() === activeVoyage.charterer.toLowerCase()
+                        ? 'Carrier Only'
+                        : 'Carrier: Link AIS'}
+                    </span>
                   </button>
                 </>
               )}
@@ -290,6 +333,7 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
                   onClick={() => onAdjudicate(activeVoyage.voyage_id)}
                   disabled={isLoadingAction}
                   className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white shadow-md transition-all flex items-center space-x-1.5"
+                  title="Run GenLayer subjective AI consensus"
                 >
                   <Scale className="w-4 h-4" />
                   <span>Adjudicate Demurrage (AI Jury)</span>
@@ -300,15 +344,43 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
                 <>
                   <button
                     onClick={() => onOpenAppeal(activeVoyage)}
-                    className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800 transition-colors"
+                    disabled={
+                      Boolean(
+                        !currentAccount ||
+                          (currentAccount.toLowerCase() !== activeVoyage.charterer.toLowerCase() &&
+                            currentAccount.toLowerCase() !== activeVoyage.carrier.toLowerCase())
+                      )
+                    }
+                    className={`px-3.5 py-2 text-xs font-semibold rounded-xl border transition-colors ${
+                      !currentAccount ||
+                      (currentAccount.toLowerCase() !== activeVoyage.charterer.toLowerCase() &&
+                        currentAccount.toLowerCase() !== activeVoyage.carrier.toLowerCase())
+                        ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'
+                        : 'bg-rose-950/80 hover:bg-rose-900 text-rose-300 border-rose-800'
+                    }`}
+                    title="File appeal with 10% bond (Charterer or Carrier only)"
                   >
                     File Appeal (10% Bond)
                   </button>
 
                   <button
                     onClick={() => onFinalize(activeVoyage.voyage_id)}
-                    disabled={isLoadingAction}
-                    className="px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-colors flex items-center space-x-1.5"
+                    disabled={
+                      isLoadingAction ||
+                      Boolean(
+                        !currentAccount ||
+                          (currentAccount.toLowerCase() !== activeVoyage.charterer.toLowerCase() &&
+                            currentAccount.toLowerCase() !== activeVoyage.carrier.toLowerCase())
+                      )
+                    }
+                    className={`px-4 py-2 text-xs font-semibold rounded-xl shadow-md transition-colors flex items-center space-x-1.5 ${
+                      !currentAccount ||
+                      (currentAccount.toLowerCase() !== activeVoyage.charterer.toLowerCase() &&
+                        currentAccount.toLowerCase() !== activeVoyage.carrier.toLowerCase())
+                        ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    }`}
+                    title="Finalize payout after cooling-off challenge window"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Finalize Settlement Payout</span>

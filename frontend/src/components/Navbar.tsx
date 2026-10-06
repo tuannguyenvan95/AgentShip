@@ -10,6 +10,7 @@ import {
   Columns3,
   Moon,
   Sun,
+  LogOut,
 } from 'lucide-react';
 import { formatAddress, formatWei } from '../utils/formatters';
 
@@ -22,6 +23,7 @@ interface NavbarProps {
   onToggleLayout: () => void;
   onToggleTheme: () => void;
   onConnect: () => void;
+  onDisconnect: () => void;
   onSwitchNetwork: () => void;
   onOpenCreate: () => void;
   onOpenLeaderboard: () => void;
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleLayout,
   onToggleTheme,
   onConnect,
+  onDisconnect,
   onSwitchNetwork,
   onOpenCreate,
   onOpenLeaderboard,
@@ -199,6 +202,19 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {account.substring(2, 4).toUpperCase()}
                 </div>
               </div>
+
+              {/* Disconnect Button */}
+              <button
+                onClick={onDisconnect}
+                title="Disconnect Wallet"
+                className={`p-2 rounded-xl border transition-colors flex items-center justify-center ${
+                  isDarkTheme
+                    ? 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-900/50'
+                    : 'bg-white border-slate-200 text-slate-500 hover:text-rose-600 hover:border-rose-200'
+                }`}
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
           ) : (
             <button

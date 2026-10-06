@@ -67,6 +67,77 @@ export const AdmiraltyInspectorModal: React.FC<AdmiraltyInspectorModalProps> = (
 
         {/* Modal Scrollable Content */}
         <div className="p-6 overflow-y-auto space-y-5 flex-1">
+          {/* Financial Escrow Breakdown */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                Base Freight
+              </span>
+              <div className="text-base font-bold font-mono text-navy-900">
+                {formatWei(voyage.freight_amount, 3)}{' '}
+                <span className="text-[11px] font-normal text-slate-500">GEN</span>
+              </div>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                Demurrage Buffer
+              </span>
+              <div className="text-base font-bold font-mono text-amber-600">
+                {formatWei(voyage.demurrage_deposit, 3)}{' '}
+                <span className="text-[11px] font-normal text-slate-500">GEN</span>
+              </div>
+            </div>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
+                Dispute Bond (10%)
+              </span>
+              <div className="text-base font-bold font-mono text-rose-600">
+                {formatWei(voyage.dispute_bond, 3)}{' '}
+                <span className="text-[11px] font-normal text-slate-500">GEN</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Settlement Claim Entitlement Ledger */}
+          <div className="p-3.5 rounded-xl border bg-gradient-to-r from-slate-50 to-sky-50/40 border-slate-200 space-y-2">
+            <div className="flex items-center justify-between text-xs font-bold text-navy-900 uppercase tracking-wider">
+              <span>Settlement Claim Entitlements</span>
+              <span className="font-mono text-[10px] text-slate-500">
+                {voyage.status === 2
+                  ? 'AWAITING FINALIZATION'
+                  : [3, 4, 5].includes(voyage.status)
+                  ? 'SETTLED'
+                  : 'ESCROW ACTIVE'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 text-xs pt-1">
+              <div className="p-2.5 rounded-lg bg-white border border-slate-200/80">
+                <span className="text-slate-500 block text-[11px] font-semibold">Charterer Claim:</span>
+                <span className="font-mono font-bold text-xs text-navy-900">
+                  {voyage.verdict === 'DEMURRAGE_ENFORCED'
+                    ? '0.000 GEN (Buffer Paid to Carrier)'
+                    : voyage.verdict === 'FORCE_MAJEURE_EXCUSED' || voyage.verdict === 'CLEAN_ON_TIME'
+                    ? `${formatWei(voyage.demurrage_deposit, 3)} GEN (Full Buffer Reclaimed)`
+                    : `${formatWei(voyage.demurrage_deposit, 3)} GEN (Buffer Protected)`}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white border border-slate-200/80">
+                <span className="text-slate-500 block text-[11px] font-semibold">Carrier Claim:</span>
+                <span className="font-mono font-bold text-xs text-navy-900">
+                  {voyage.verdict === 'DEMURRAGE_ENFORCED'
+                    ? `${formatWei(
+                        (
+                          BigInt(voyage.freight_amount || '0') +
+                          BigInt(voyage.demurrage_deposit || '0')
+                        ).toString(),
+                        3
+                      )} GEN (Freight + Buffer)`
+                    : `${formatWei(voyage.freight_amount, 3)} GEN (Freight Fee)`}
+                </span>
+              </div>
+            </div>
+          </div>
+
           {/* Status & Verdict Highlight */}
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
             <div>

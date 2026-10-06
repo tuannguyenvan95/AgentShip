@@ -4,6 +4,12 @@ from dataclasses import dataclass
 import json
 import hashlib
 
+# Canonical GenVM transaction rollback error support
+if hasattr(gl, "vm") and hasattr(gl.vm, "UserError"):
+    gl.UserError = gl.vm.UserError
+elif not hasattr(gl, "UserError"):
+    gl.UserError = ValueError
+
 CANARY_TOKEN = "CANARY_AGENT_SHIP_MARITIME_V1"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 

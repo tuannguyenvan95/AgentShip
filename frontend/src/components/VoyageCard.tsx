@@ -86,6 +86,25 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
                   <span>• Carrier: {formatAddress(voyage.carrier)}</span>
                 )}
               </p>
+              {currentAccount && (
+                <div className="mt-1 flex items-center space-x-1.5">
+                  {isCharterer && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+                      YOUR ROLE: CHARTERER (Cargo Owner)
+                    </span>
+                  )}
+                  {isCarrier && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      YOUR ROLE: CARRIER (Vessel Owner)
+                    </span>
+                  )}
+                  {!isCharterer && !isCarrier && (
+                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                      OBSERVER / SYNDICATE
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -249,10 +268,20 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
 
               <button
                 onClick={() => onOpenTelemetry(voyage)}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-navy-900 hover:bg-navy-950 rounded-lg shadow-sm transition-colors flex items-center space-x-1"
+                disabled={Boolean(isCharterer)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center space-x-1 ${
+                  isCharterer
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'text-white bg-navy-900 hover:bg-navy-950'
+                }`}
+                title={
+                  isCharterer
+                    ? 'Charterers cannot act as Carrier for their own booking'
+                    : 'Carrier: Accept voyage & submit AIS telemetry'
+                }
               >
                 <Ship className="w-3.5 h-3.5" />
-                <span>Claim & Link AIS</span>
+                <span>{isCharterer ? 'Carrier Only' : 'Claim & Link AIS'}</span>
               </button>
             </>
           )}
@@ -262,9 +291,10 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
               onClick={() => onAdjudicate(voyage.voyage_id)}
               disabled={isLoadingAction}
               className="px-3.5 py-1.5 text-xs font-semibold text-white bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 rounded-lg shadow-sm transition-all flex items-center space-x-1"
+              title="Stakeholders trigger AI subjective consensus"
             >
               <Scale className="w-3.5 h-3.5" />
-              <span>Adjudicate Demurrage</span>
+              <span>Adjudicate (AI Jury)</span>
             </button>
           )}
 
@@ -272,15 +302,34 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
             <>
               <button
                 onClick={() => onOpenAppeal(voyage)}
-                className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg transition-colors"
+                disabled={Boolean(!isCharterer && !isCarrier)}
+                className={`px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                  !isCharterer && !isCarrier
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                    : 'text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100'
+                }`}
+                title={
+                  !isCharterer && !isCarrier
+                    ? 'Only Charterer or Carrier can file an appeal'
+                    : 'File appeal with 10% bond'
+                }
               >
                 Appeal (10% Bond)
               </button>
 
               <button
                 onClick={() => onFinalize(voyage.voyage_id)}
-                disabled={isLoadingAction}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors flex items-center space-x-1"
+                disabled={isLoadingAction || Boolean(!isCharterer && !isCarrier)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-colors flex items-center space-x-1 ${
+                  !isCharterer && !isCarrier
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    : 'text-white bg-emerald-600 hover:bg-emerald-700'
+                }`}
+                title={
+                  !isCharterer && !isCarrier
+                    ? 'Only Charterer or Carrier can finalize settlement'
+                    : 'Finalize payout after cooling-off period'
+                }
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Finalize Payout</span>

@@ -190,6 +190,16 @@ export const App: React.FC = () => {
     }
   };
 
+  const disconnectWallet = () => {
+    setAccount(null);
+    setBalance('0');
+    setUserProfile(null);
+    setNotification({
+      type: 'info',
+      message: 'Wallet disconnected from AgentShip session.',
+    });
+  };
+
   const switchNetwork = async () => {
     if (typeof window !== 'undefined' && (window as any).ethereum) {
       try {
@@ -376,6 +386,7 @@ export const App: React.FC = () => {
         onToggleLayout={() => setLayoutMode((m) => (m === 'cockpit' ? 'grid' : 'cockpit'))}
         onToggleTheme={() => setIsDarkTheme((t) => !t)}
         onConnect={connectWallet}
+        onDisconnect={disconnectWallet}
         onSwitchNetwork={switchNetwork}
         onOpenCreate={() => setIsCreateOpen(true)}
         onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
