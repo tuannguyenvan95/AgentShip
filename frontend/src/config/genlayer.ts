@@ -1,4 +1,5 @@
-import { createClient, chains } from 'genlayer-js';
+import { createClient, chains, abi } from 'genlayer-js';
+import { encodeFunctionData, toRlp, toHex } from 'viem';
 
 export const STUDIONET_CHAIN_ID_DEC = 61999;
 export const STUDIONET_CHAIN_ID_HEX = "0xF22F";
@@ -10,6 +11,51 @@ export const DEFAULT_CONTRACT_ADDRESS = "0xcCCbA20F2FFB4De780d694fe3759ecd1dfFBd
 export const genlayerClient = createClient({
   chain: chains.studionet,
 });
+
+const ADD_TRANSACTION_ABI_V5 = [
+  {
+    type: 'function',
+    name: 'addTransaction',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: '_sender', type: 'address' },
+      { name: '_recipient', type: 'address' },
+      { name: '_numOfInitialValidators', type: 'uint256' },
+      { name: '_maxRotations', type: 'uint256' },
+      { name: '_txData', type: 'bytes' }
+    ],
+    outputs: []
+  }
+];
+
+export function encodeGenLayerTransaction(
+  senderAddress: string,
+  recipientAddress: string,
+  functionName: string,
+  args: any[]
+): { to: `0x${string}`; data: `0x${string}` } {
+  const calldataObj = (abi.calldata as any).makeCalldataObject(functionName, args, undefined);
+  const encoded = (abi.calldata as any).encode(calldataObj);
+  const serialized = toRlp([toHex(encoded), toHex(0)]);
+  const consensusAddress = ((chains.studionet as any).consensusMainContract?.address || "0xb7278A61aa25c888815aFC32Ad3cC52fF24fE575") as `0x${string}`;
+
+  const data = encodeFunctionData({
+    abi: ADD_TRANSACTION_ABI_V5,
+    functionName: 'addTransaction',
+    args: [
+      senderAddress as `0x${string}`,
+      recipientAddress as `0x${string}`,
+      5n,
+      3n,
+      serialized as `0x${string}`
+    ]
+  });
+
+  return {
+    to: consensusAddress,
+    data
+  };
+}
 
 export const STUDIONET_CHAIN_CONFIG = {
   chainId: STUDIONET_CHAIN_ID_HEX,

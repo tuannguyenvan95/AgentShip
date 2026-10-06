@@ -36,6 +36,7 @@ import {
   STUDIONET_CHAIN_CONFIG,
   STUDIONET_RPC_URL,
   genlayerClient,
+  encodeGenLayerTransaction,
 } from './config/genlayer';
 
 export const App: React.FC = () => {
@@ -262,15 +263,19 @@ export const App: React.FC = () => {
 
     try {
       const ethereum = (window as any).ethereum;
-      // Send transaction with GenLayer encoded data
+      // Encode transaction through GenLayer consensus contract ABI
+      const encodedTx = encodeGenLayerTransaction(
+        account,
+        DEFAULT_CONTRACT_ADDRESS,
+        functionName,
+        args
+      );
+
       const txParams = {
         from: account,
-        to: DEFAULT_CONTRACT_ADDRESS,
+        to: encodedTx.to,
         value: '0x' + valueWei.toString(16),
-        data: {
-          function_name: functionName,
-          args: args,
-        },
+        data: encodedTx.data,
       };
 
       const txHash = await ethereum.request({
