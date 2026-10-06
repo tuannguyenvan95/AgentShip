@@ -66,7 +66,7 @@ export const SubmitTelemetryModal: React.FC<SubmitTelemetryModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Live AIS Tracking Endpoint
             </label>
             <div className="relative">
@@ -76,17 +76,17 @@ export const SubmitTelemetryModal: React.FC<SubmitTelemetryModalProps> = ({
                 value={aisUrl}
                 onChange={(e) => setAisUrl(e.target.value)}
                 placeholder="https://marinetraffic.org/ais/vessel_live.json"
-                className="w-full px-3.5 py-2.5 text-xs font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-xs font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
-              <Link2 className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+              <Link2 className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
             </div>
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-[11px] text-slate-500 mt-1 block">
               Public AIS stream reporting coordinates, knots, and port arrival timestamp.
             </span>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Marine Oceanic Weather Telemetry Endpoint
             </label>
             <div className="relative">
@@ -96,11 +96,11 @@ export const SubmitTelemetryModal: React.FC<SubmitTelemetryModalProps> = ({
                 value={weatherUrl}
                 onChange={(e) => setWeatherUrl(e.target.value)}
                 placeholder="https://noaa-marine.org/data/ocean_sea_state.txt"
-                className="w-full px-3.5 py-2.5 text-xs font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-xs font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
-              <CloudRain className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+              <CloudRain className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
             </div>
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-[11px] text-slate-500 mt-1 block">
               NOAA / ECMWF oceanic sea state, wave height, and Beaufort gale scale.
             </span>
           </div>

@@ -1,9 +1,15 @@
+import { createClient, chains } from 'genlayer-js';
+
 export const STUDIONET_CHAIN_ID_DEC = 61999;
 export const STUDIONET_CHAIN_ID_HEX = "0xF22F";
 export const STUDIONET_RPC_URL = "https://studio.genlayer.com/api";
 export const STUDIONET_EXPLORER_URL = "https://studio.genlayer.com";
 
 export const DEFAULT_CONTRACT_ADDRESS = "0xcCCbA20F2FFB4De780d694fe3759ecd1dfFBdDB2";
+
+export const genlayerClient = createClient({
+  chain: chains.studionet,
+});
 
 export const STUDIONET_CHAIN_CONFIG = {
   chainId: STUDIONET_CHAIN_ID_HEX,

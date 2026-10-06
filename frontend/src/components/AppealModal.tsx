@@ -71,7 +71,7 @@ export const AppealModal: React.FC<AppealModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Appeal Justification & Legal Basis
             </label>
             <textarea
@@ -81,9 +81,9 @@ export const AppealModal: React.FC<AppealModalProps> = ({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="State the verifiable maritime facts (e.g. harbor closure notices, cyclone reports, or incorrect laytime calculation)..."
-              className="w-full px-3.5 py-2.5 text-xs font-sans border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-slate-50/50"
+              className="w-full px-3.5 py-2.5 text-xs font-sans font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-white shadow-2xs"
             />
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-[11px] text-slate-500 mt-1 block">
               Minimum 10 characters required. Will be evaluated by Supreme Appellate AI Jury.
             </span>
           </div>

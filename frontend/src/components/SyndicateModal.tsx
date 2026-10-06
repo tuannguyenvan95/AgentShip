@@ -62,7 +62,7 @@ export const SyndicateModal: React.FC<SyndicateModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Co-Funding Contribution (GEN)
             </label>
             <div className="relative">
@@ -72,9 +72,9 @@ export const SyndicateModal: React.FC<SyndicateModalProps> = ({
                 value={pledgeGen}
                 onChange={(e) => setPledgeGen(e.target.value)}
                 placeholder="0.01"
-                className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
-              <span className="text-xs font-bold text-slate-400 absolute right-3 top-3">
+              <span className="text-xs font-bold text-slate-500 absolute right-3 top-3">
                 GEN
               </span>
             </div>

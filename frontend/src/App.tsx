@@ -35,6 +35,7 @@ import {
   STUDIONET_CHAIN_ID_HEX,
   STUDIONET_CHAIN_CONFIG,
   STUDIONET_RPC_URL,
+  genlayerClient,
 } from './config/genlayer';
 
 export const App: React.FC = () => {
@@ -74,8 +75,30 @@ export const App: React.FC = () => {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [activeVoyage, setActiveVoyage] = useState<MaritimeVoyage | null>(null);
 
-  // RPC Contract Read helper
+  // RPC Contract Read helper using official genlayerClient with fallback
   const callContractView = async (functionName: string, args: any[] = []): Promise<any> => {
+    // 1. Try official SDK client
+    try {
+      const res = await genlayerClient.readContract({
+        address: DEFAULT_CONTRACT_ADDRESS as `0x${string}`,
+        functionName: functionName,
+        args: args,
+      });
+      if (res !== undefined && res !== null) {
+        if (typeof res === 'string') {
+          try {
+            return JSON.parse(res);
+          } catch {
+            return res;
+          }
+        }
+        return res;
+      }
+    } catch (clientErr: any) {
+      // Fall through to HTTP fetch if SDK throws
+    }
+
+    // 2. HTTP JSON-RPC fallback
     try {
       const response = await fetch(STUDIONET_RPC_URL, {
         method: 'POST',

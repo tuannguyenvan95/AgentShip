@@ -109,7 +109,7 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
               Vessel IMO Number
             </label>
             <input
@@ -118,16 +118,16 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
               value={vesselImo}
               onChange={(e) => setVesselImo(e.target.value)}
               placeholder="e.g. IMO9811000"
-              className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 focus:border-transparent bg-slate-50/50"
+              className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
             />
-            <span className="text-[11px] text-slate-400 mt-1 block">
+            <span className="text-[11px] text-slate-500 mt-1 block">
               7-character unique International Maritime Organization registry.
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
                 Agreed Laytime (Hours)
               </label>
               <div className="relative">
@@ -138,14 +138,14 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
                   required
                   value={laytimeHours}
                   onChange={(e) => setLaytimeHours(parseInt(e.target.value) || 24)}
-                  className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                  className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
                 />
-                <Clock className="w-4 h-4 text-slate-400 absolute right-3 top-3" />
+                <Clock className="w-4 h-4 text-slate-500 absolute right-3 top-3" />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
                 Duration (Blocks)
               </label>
               <input
@@ -154,14 +154,14 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
                 required
                 value={durationBlocks}
                 onChange={(e) => setDurationBlocks(parseInt(e.target.value) || 6000)}
-                className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
                 Base Freight (GEN)
               </label>
               <input
@@ -170,12 +170,12 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
                 value={freightGen}
                 onChange={(e) => setFreightGen(e.target.value)}
                 placeholder="0.04"
-                className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
                 Demurrage Buffer (GEN)
               </label>
               <input
@@ -184,7 +184,7 @@ export const CreateVoyageModal: React.FC<CreateVoyageModalProps> = ({
                 value={demurrageGen}
                 onChange={(e) => setDemurrageGen(e.target.value)}
                 placeholder="0.01"
-                className="w-full px-3.5 py-2.5 text-sm font-mono border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-slate-50/50"
+                className="w-full px-3.5 py-2.5 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-ocean-500 bg-white shadow-2xs"
               />
             </div>
           </div>

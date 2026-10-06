@@ -12,6 +12,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Ensure form inputs always display dark high-contrast text and readable placeholders */
+input, textarea, select {
+  color: #0f172a !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1 !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
