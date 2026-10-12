@@ -89,7 +89,7 @@ def run_comprehensive_onchain_task():
     pledges = json.loads(pledges_raw)
     print(f"  -> On-Chain Syndicate Pledges count: {len(pledges)}")
     for p in pledges:
-        print(f"     * Funder: {p['funder']} | Amount: {int(p['amount'])/1e18:.4f} GEN | Time: {p['timestamp']}")
+        print(f"     * Funder: {p['funder']} | Amount: {int(p['amount'])/1e18:.4f} GEN | Role: {p.get('role', 'N/A')}")
     assert len(pledges) >= 2, "Expected at least 2 pledges (Charterer initial + Carrier co-funder)"
 
     # Step 3: Role Authorization Security Check
@@ -135,8 +135,8 @@ def run_comprehensive_onchain_task():
     print(f"  Carrier Registered: {v_updated['carrier']}")
     print(f"  Freight Total: {int(v_updated['freight_amount'])/1e18:.4f} GEN")
     print(f"  Demurrage Deposit: {int(v_updated['demurrage_deposit'])/1e18:.4f} GEN")
-    print(f"  AIS Telemetry URI: {v_updated['telemetry_ais_url']}")
-    print(f"  Weather Buoy URI:  {v_updated['telemetry_weather_url']}")
+    print(f"  AIS Telemetry URI: {v_updated.get('ais_tracking_url', '')}")
+    print(f"  Weather Buoy URI:  {v_updated.get('marine_weather_url', '')}")
     assert v_updated["status"] == 1, "Status must be STATUS_IN_TRANSIT (1)"
     assert v_updated["carrier"].lower() == carrier_acct.address.lower(), "Carrier does not match sender"
 
@@ -161,8 +161,8 @@ def run_comprehensive_onchain_task():
         print(f"  - Addr: {entry['address']} | Score: {entry['score']} | Tier: {entry['tier']}")
 
     print("\n" + "=" * 80)
-    print(f"  >>> TEST 100% HOÀN THÀNH VÀ TRƠN TRU TRÊN GENLAYER STUDIONET! <<<")
-    print(f"  Voyage #{vid} đã hoàn tất toàn bộ chu trình on-chain không qua bất kỳ mock nào.")
+    print("  >>> TEST 100% SUCCESSFUL ON GENLAYER STUDIONET! <<<")
+    print(f"  Voyage #{vid} completed full on-chain lifecycle without any mocks.")
     print("=" * 80)
 
 if __name__ == "__main__":
