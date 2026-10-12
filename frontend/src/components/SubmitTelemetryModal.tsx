@@ -6,7 +6,7 @@ interface SubmitTelemetryModalProps {
   voyage: MaritimeVoyage | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (voyageId: number, aisUrl: string, weatherUrl: string) => void;
+  onSubmit: (voyageId: string | number, aisUrl: string, weatherUrl: string) => void;
   isSubmitting: boolean;
 }
 

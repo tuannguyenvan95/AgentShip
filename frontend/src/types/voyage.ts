@@ -1,5 +1,5 @@
 export interface MaritimeVoyage {
-  voyage_id: number;
+  voyage_id: string | number;
   charterer: string;
   carrier: string;
   dispute_initiator: string;

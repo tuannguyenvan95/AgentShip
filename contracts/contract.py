@@ -62,7 +62,7 @@ def _pay_native(recipient: Address, amount: bigint) -> None:
 @allow_storage
 @dataclass
 class MaritimeVoyage:
-    voyage_id: u64
+    voyage_id: str
     charterer: Address             # Cargo owner / Shipper
     carrier: Address               # Shipowner / Shipping Line
     dispute_initiator: Address
@@ -93,8 +93,8 @@ class Contract(gl.Contract):
     Milestone v3: Syndicate Co-Funding, Proportional Solvency, Dynamic Trust Tiers & Fast-Track Adjudication
     Target Network: GenLayer studionet (Chain ID: 61999)
     """
-    voyages: TreeMap[u64, MaritimeVoyage]
-    voyage_ids: DynArray[u64]
+    voyages: TreeMap[str, MaritimeVoyage]
+    voyage_ids: DynArray[str]
     total_maritime_locked: bigint
     total_voyages_settled: u32
     voyage_counter: u64
@@ -110,7 +110,7 @@ class Contract(gl.Contract):
     registered_registry: TreeMap[str, str]
 
     # Milestone v3: Syndicate Co-Funding JSON (Voyage ID -> Serialized JSON array of pledges)
-    syndicate_pledges_json: TreeMap[u64, str]
+    syndicate_pledges_json: TreeMap[str, str]
 
     def __init__(self):
         # GenVM auto-initializes TreeMap and DynArray. Do not call _get_sender() here.
@@ -118,6 +118,10 @@ class Contract(gl.Contract):
         self.total_maritime_locked = bigint(0)
         self.total_voyages_settled = u32(0)
         self.voyage_counter = u64(0)
+
+    def _resolve_vid(self, voyage_id) -> str:
+        """Safely normalize voyage_id to str for GenVM TreeMap compatibility."""
+        return str(voyage_id).strip()
 
     def _ensure_owner(self) -> None:
         if _addr_str(self.owner) == ZERO_ADDRESS:
@@ -173,7 +177,7 @@ class Contract(gl.Contract):
         laytime_hours: int,
         demurrage_buffer_wei: bigint,
         duration_blocks: int
-    ) -> u64:
+    ) -> str:
         self._ensure_owner()
         total_deposit = bigint(gl.message.value)
         if total_deposit <= demurrage_buffer_wei or demurrage_buffer_wei <= bigint(0):
@@ -188,7 +192,7 @@ class Contract(gl.Contract):
         dur = u256(duration_blocks if duration_blocks > 0 else 6000)
 
         self.voyage_counter = self.voyage_counter + u64(1)
-        voyage_id = self.voyage_counter
+        voyage_id = str(self.voyage_counter)
         current_block = self._get_current_block()
         expires_at = current_block + dur
         empty_addr = Address(ZERO_ADDRESS)
@@ -236,12 +240,13 @@ class Contract(gl.Contract):
         return voyage_id
 
     @gl.public.write.payable
-    def pledge_voyage_escrow(self, voyage_id: u64) -> None:
+    def pledge_voyage_escrow(self, voyage_id: str) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_VOYAGE_OPEN:
             raise gl.UserError("Can only pool funds into open voyage bookings.")
 
@@ -255,7 +260,7 @@ class Contract(gl.Contract):
         v.co_funder_count = v.co_funder_count + u32(1)
         self.total_maritime_locked = self.total_maritime_locked + pledge_val
 
-        pledges_raw = self.syndicate_pledges_json.get(voyage_id, "[]")
+        pledges_raw = self.syndicate_pledges_json.get(vid, "[]")
         try:
             p_list = json.loads(pledges_raw)
         except Exception:
@@ -265,20 +270,21 @@ class Contract(gl.Contract):
             "amount": str(pledge_val),
             "role": "SYNDICATE_CO_SHIPPER"
         })
-        self.syndicate_pledges_json[voyage_id] = json.dumps(p_list)
+        self.syndicate_pledges_json[vid] = json.dumps(p_list)
 
     @gl.public.write
     def submit_voyage_logs(
         self,
-        voyage_id: u64,
+        voyage_id: str,
         ais_tracking_url: str,
         marine_weather_url: str
     ) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_VOYAGE_OPEN:
             raise gl.UserError("Voyage is not open for log submission.")
 
@@ -302,12 +308,13 @@ class Contract(gl.Contract):
         v.reason = "Voyage active. Telemetry linked. Ready for port arrival demurrage adjudication."
 
     @gl.public.write
-    def adjudicate_demurrage(self, voyage_id: u64) -> None:
+    def adjudicate_demurrage(self, voyage_id: str) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_IN_TRANSIT:
             raise gl.UserError("Voyage is not in active transit monitoring status.")
 
@@ -467,12 +474,13 @@ Respond ONLY with valid JSON without markdown fences:
         v.is_fast_track = self._is_fast_track_eligible(_addr_str(v.charterer), _addr_str(v.carrier))
 
     @gl.public.write.payable
-    def appeal_verdict(self, voyage_id: u64, dispute_reason: str) -> None:
+    def appeal_verdict(self, voyage_id: str, dispute_reason: str) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_AWAITING_PAYOUT:
             raise gl.UserError("Can only appeal voyages in AWAITING_PAYOUT status.")
 
@@ -507,12 +515,13 @@ Respond ONLY with valid JSON without markdown fences:
         self.total_maritime_locked = self.total_maritime_locked + staked
 
     @gl.public.write
-    def adjudicate_appeal(self, voyage_id: u64, supplemental_log_url: str) -> None:
+    def adjudicate_appeal(self, voyage_id: str, supplemental_log_url: str) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_DISPUTED:
             raise gl.UserError("Voyage is not in DISPUTED status.")
 
@@ -639,12 +648,13 @@ Respond ONLY with valid JSON:
             self.stats_appeals_won[counterparty_str] = self.stats_appeals_won.get(counterparty_str, u32(0)) + u32(1)
 
     @gl.public.write
-    def finalize_settlement(self, voyage_id: u64) -> None:
+    def finalize_settlement(self, voyage_id: str) -> None:
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if v.status != STATUS_AWAITING_PAYOUT:
             raise gl.UserError("Voyage is not awaiting settlement payout.")
 
@@ -700,16 +710,17 @@ Respond ONLY with valid JSON:
             _pay_native(v.charterer, total_escrow)
 
     @gl.public.write
-    def cancel_or_reclaim(self, voyage_id: u64) -> None:
+    def cancel_or_reclaim(self, voyage_id: str) -> None:
         """
         Charterer reclaims escrow if booking expired unclaimed or carrier abandoned (>150 blocks).
         Safely refunds demurrage buffer to primary charterer and proportional freight to all co-funders.
         """
         self._ensure_owner()
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         if _addr_str(_get_sender()) != _addr_str(v.charterer):
             raise gl.UserError("Role Violation: Only the charterer can cancel or reclaim booking.")
 
@@ -738,7 +749,7 @@ Respond ONLY with valid JSON:
         _pay_native(v.charterer, demurrage_val)
 
         # 2. Freight amount is refunded to syndicate co-funders
-        pledges_raw = self.syndicate_pledges_json.get(voyage_id, "[]")
+        pledges_raw = self.syndicate_pledges_json.get(vid, "[]")
         refunded_via_syndicate = False
         try:
             p_list = json.loads(pledges_raw)
@@ -757,13 +768,14 @@ Respond ONLY with valid JSON:
     # ── Read-only Views ───────────────────────────────────────────────
 
     @gl.public.view
-    def get_voyage(self, voyage_id: u64) -> str:
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+    def get_voyage(self, voyage_id: str) -> str:
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        v = self.voyages[voyage_id]
+        v = self.voyages[vid]
         data = {
-            "voyage_id": int(v.voyage_id),
+            "voyage_id": str(v.voyage_id),
             "charterer": _addr_str(v.charterer),
             "carrier": _addr_str(v.carrier),
             "dispute_initiator": _addr_str(v.dispute_initiator),
@@ -800,7 +812,7 @@ Respond ONLY with valid JSON:
             if vid in self.voyages:
                 v = self.voyages[vid]
                 voyages_list.append({
-                    "voyage_id": int(v.voyage_id),
+                    "voyage_id": str(v.voyage_id),
                     "charterer": _addr_str(v.charterer),
                     "carrier": _addr_str(v.carrier),
                     "dispute_initiator": _addr_str(v.dispute_initiator),
@@ -875,11 +887,12 @@ Respond ONLY with valid JSON:
         return json.dumps(board[:20])
 
     @gl.public.view
-    def get_voyage_pledges(self, voyage_id: u64) -> str:
-        if voyage_id not in self.voyages:
-            raise gl.UserError(f"Voyage {int(voyage_id)} does not exist.")
+    def get_voyage_pledges(self, voyage_id: str) -> str:
+        vid = self._resolve_vid(voyage_id)
+        if vid not in self.voyages:
+            raise gl.UserError(f"Voyage {vid} does not exist.")
 
-        pledges_raw = self.syndicate_pledges_json.get(voyage_id, "[]")
+        pledges_raw = self.syndicate_pledges_json.get(vid, "[]")
         try:
             return pledges_raw
         except Exception:

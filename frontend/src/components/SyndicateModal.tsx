@@ -8,7 +8,7 @@ interface SyndicateModalProps {
   pledges: SyndicatePledge[];
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (voyageId: number, pledgeGen: string) => void;
+  onSubmit: (voyageId: string | number, pledgeGen: string) => void;
   isSubmitting: boolean;
 }
 

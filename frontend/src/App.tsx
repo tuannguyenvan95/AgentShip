@@ -320,38 +320,38 @@ export const App: React.FC = () => {
   };
 
   const handleSubmitTelemetry = async (
-    voyageId: number,
+    voyageId: string | number,
     aisUrl: string,
     weatherUrl: string
   ) => {
-    await sendContractTransaction('submit_voyage_logs', [voyageId, aisUrl, weatherUrl], BigInt(0));
+    await sendContractTransaction('submit_voyage_logs', [String(voyageId), aisUrl, weatherUrl], BigInt(0));
     setIsTelemetryOpen(false);
   };
 
-  const handleAdjudicateDemurrage = async (voyageId: number) => {
-    await sendContractTransaction('adjudicate_demurrage', [voyageId], BigInt(0));
+  const handleAdjudicateDemurrage = async (voyageId: string | number) => {
+    await sendContractTransaction('adjudicate_demurrage', [String(voyageId)], BigInt(0));
   };
 
   const handleFileAppeal = async (
-    voyageId: number,
+    voyageId: string | number,
     disputeReason: string,
     bondWei: bigint
   ) => {
-    await sendContractTransaction('appeal_verdict', [voyageId, disputeReason], bondWei);
+    await sendContractTransaction('appeal_verdict', [String(voyageId), disputeReason], bondWei);
     setIsAppealOpen(false);
   };
 
-  const handleFinalizeSettlement = async (voyageId: number) => {
-    await sendContractTransaction('finalize_settlement', [voyageId], BigInt(0));
+  const handleFinalizeSettlement = async (voyageId: string | number) => {
+    await sendContractTransaction('finalize_settlement', [String(voyageId)], BigInt(0));
   };
 
-  const handleCancelOrReclaim = async (voyageId: number) => {
-    await sendContractTransaction('cancel_or_reclaim', [voyageId], BigInt(0));
+  const handleCancelOrReclaim = async (voyageId: string | number) => {
+    await sendContractTransaction('cancel_or_reclaim', [String(voyageId)], BigInt(0));
   };
 
-  const handlePledgeSyndicate = async (voyageId: number, pledgeGen: string) => {
+  const handlePledgeSyndicate = async (voyageId: string | number, pledgeGen: string) => {
     const pledgeWei = BigInt(Math.floor(parseFloat(pledgeGen) * 1e18));
-    await sendContractTransaction('pledge_voyage_escrow', [voyageId], pledgeWei);
+    await sendContractTransaction('pledge_voyage_escrow', [String(voyageId)], pledgeWei);
     setIsSyndicateOpen(false);
   };
 
@@ -373,7 +373,7 @@ export const App: React.FC = () => {
 
   const openSyndicateModal = async (v: MaritimeVoyage) => {
     setActiveVoyage(v);
-    const pledges = await callContractView('get_voyage_pledges', [v.voyage_id]);
+    const pledges = await callContractView('get_voyage_pledges', [String(v.voyage_id)]);
     setSelectedPledges(Array.isArray(pledges) ? pledges : []);
     setIsSyndicateOpen(true);
   };

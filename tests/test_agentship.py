@@ -30,7 +30,7 @@ def test_contract_syntax_and_structure(contract_source):
 def test_voyage_struct_attributes(contract_source):
     """Ensure MaritimeVoyage struct defines all state fields including telemetry, canary, and trust attributes."""
     expected_fields = [
-        "voyage_id: u64",
+        "voyage_id: str",
         "charterer: Address",
         "carrier: Address",
         "freight_amount: bigint",

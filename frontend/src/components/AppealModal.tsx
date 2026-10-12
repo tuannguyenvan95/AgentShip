@@ -7,7 +7,7 @@ interface AppealModalProps {
   voyage: MaritimeVoyage | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (voyageId: number, disputeReason: string, bondWei: bigint) => void;
+  onSubmit: (voyageId: string | number, disputeReason: string, bondWei: bigint) => void;
   isSubmitting: boolean;
 }
 

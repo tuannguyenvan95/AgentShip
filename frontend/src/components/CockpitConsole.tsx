@@ -38,8 +38,8 @@ interface CockpitConsoleProps {
   onOpenInspector: (voyage: MaritimeVoyage) => void;
   onOpenAppeal: (voyage: MaritimeVoyage) => void;
   onOpenSyndicate: (voyage: MaritimeVoyage) => void;
-  onAdjudicate: (voyageId: number) => void;
-  onFinalize: (voyageId: number) => void;
+  onAdjudicate: (voyageId: string | number) => void;
+  onFinalize: (voyageId: string | number) => void;
   isLoadingAction: boolean;
   isDarkTheme?: boolean;
 }

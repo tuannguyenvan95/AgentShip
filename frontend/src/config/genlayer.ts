@@ -6,7 +6,7 @@ export const STUDIONET_CHAIN_ID_HEX = "0xF22F";
 export const STUDIONET_RPC_URL = "https://studio.genlayer.com/api";
 export const STUDIONET_EXPLORER_URL = "https://studio.genlayer.com";
 
-export const DEFAULT_CONTRACT_ADDRESS = "0xcCCbA20F2FFB4De780d694fe3759ecd1dfFBdDB2";
+export const DEFAULT_CONTRACT_ADDRESS = "0x714fF4266088702c90267c1516B31e2fceD37e14";
 
 export const genlayerClient = createClient({
   chain: chains.studionet,
