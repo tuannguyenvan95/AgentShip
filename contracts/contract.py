@@ -202,9 +202,9 @@ class Contract(gl.Contract):
     def create_voyage_escrow(
         self,
         vessel_imo: str,
-        laytime_hours: int,
+        laytime_hours: u32,
         demurrage_buffer_wei: bigint,
-        duration_blocks: int
+        duration_blocks: u32
     ) -> str:
         self._ensure_owner()
         total_deposit = bigint(gl.message.value)
