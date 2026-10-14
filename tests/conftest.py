@@ -252,6 +252,8 @@ class _MockSimContract:
 
         bond_val = int(v["dispute_bond"])
         v["dispute_bond"] = "0"
+        v["freight_amount"] = "0"
+        v["demurrage_deposit"] = "0"
         self.total_voyages_settled += 1
 
         if verdict == "APPEAL_UPHELD_FORCE_MAJEURE":
