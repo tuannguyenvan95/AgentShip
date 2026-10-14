@@ -218,8 +218,7 @@ class Contract(gl.Contract):
         freight = total_deposit - demurrage_buffer_wei
         laytime = u32(max(12, min(720, laytime_hours)))
         
-        # Calculate expiration time in seconds (safe conversion whether blocks or seconds provided)
-        dur_secs = bigint(duration_blocks * 60 if duration_blocks > 0 and duration_blocks < 100000 else (duration_blocks if duration_blocks >= 100000 else 86400 * 7))
+        dur_secs = bigint(duration_blocks * 3 if duration_blocks > 0 else 86400 * 7)
 
         self.voyage_counter = self.voyage_counter + u64(1)
         voyage_id = str(self.voyage_counter)
