@@ -18,6 +18,7 @@ import { CreateVoyageModal } from './components/CreateVoyageModal';
 import { SubmitTelemetryModal } from './components/SubmitTelemetryModal';
 import { AdmiraltyInspectorModal } from './components/AdmiraltyInspectorModal';
 import { AppealModal } from './components/AppealModal';
+import { AdjudicateAppealModal } from './components/AdjudicateAppealModal';
 import { SyndicateModal } from './components/SyndicateModal';
 import { LeaderboardDrawer } from './components/LeaderboardDrawer';
 import { CockpitConsole } from './components/CockpitConsole';
@@ -72,6 +73,7 @@ export const App: React.FC = () => {
   const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [isAppealOpen, setIsAppealOpen] = useState(false);
+  const [isAdjudicateAppealOpen, setIsAdjudicateAppealOpen] = useState(false);
   const [isSyndicateOpen, setIsSyndicateOpen] = useState(false);
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState(false);
   const [activeVoyage, setActiveVoyage] = useState<MaritimeVoyage | null>(null);
@@ -341,6 +343,14 @@ export const App: React.FC = () => {
     setIsAppealOpen(false);
   };
 
+  const handleAdjudicateAppeal = async (
+    voyageId: string | number,
+    supplementalLogUrl: string
+  ) => {
+    await sendContractTransaction('adjudicate_appeal', [String(voyageId), supplementalLogUrl], BigInt(0));
+    setIsAdjudicateAppealOpen(false);
+  };
+
   const handleFinalizeSettlement = async (voyageId: string | number) => {
     await sendContractTransaction('finalize_settlement', [String(voyageId)], BigInt(0));
   };
@@ -369,6 +379,11 @@ export const App: React.FC = () => {
   const openAppealModal = (v: MaritimeVoyage) => {
     setActiveVoyage(v);
     setIsAppealOpen(true);
+  };
+
+  const openAdjudicateAppealModal = (v: MaritimeVoyage) => {
+    setActiveVoyage(v);
+    setIsAdjudicateAppealOpen(true);
   };
 
   const openSyndicateModal = async (v: MaritimeVoyage) => {
@@ -475,6 +490,7 @@ export const App: React.FC = () => {
             onOpenTelemetry={openTelemetryModal}
             onOpenInspector={openInspectorModal}
             onOpenAppeal={openAppealModal}
+            onOpenAdjudicateAppeal={openAdjudicateAppealModal}
             onOpenSyndicate={openSyndicateModal}
             onAdjudicate={handleAdjudicateDemurrage}
             onFinalize={handleFinalizeSettlement}
@@ -612,6 +628,7 @@ export const App: React.FC = () => {
                     onOpenTelemetry={openTelemetryModal}
                     onOpenInspector={openInspectorModal}
                     onOpenAppeal={openAppealModal}
+                    onOpenAdjudicateAppeal={openAdjudicateAppealModal}
                     onOpenSyndicate={openSyndicateModal}
                     onAdjudicate={handleAdjudicateDemurrage}
                     onFinalize={handleFinalizeSettlement}
@@ -652,6 +669,14 @@ export const App: React.FC = () => {
         isOpen={isAppealOpen}
         onClose={() => setIsAppealOpen(false)}
         onSubmit={handleFileAppeal}
+        isSubmitting={isLoadingAction}
+      />
+
+      <AdjudicateAppealModal
+        voyage={activeVoyage}
+        isOpen={isAdjudicateAppealOpen}
+        onClose={() => setIsAdjudicateAppealOpen(false)}
+        onSubmit={handleAdjudicateAppeal}
         isSubmitting={isLoadingAction}
       />
 

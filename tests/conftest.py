@@ -46,6 +46,7 @@ class _MockSimContract:
         self.stats_appeals_lost = {}
         self.registered_participants = []
         self.syndicate_pledges = {}
+        self.mock_current_time = 1760000000
 
     def connect(self, account):
         self.caller = account.address if hasattr(account, "address") else str(account)
@@ -75,7 +76,7 @@ class _MockSimContract:
 
     def create_voyage_escrow(self, args, value=0):
         self.voyage_counter += 1
-        vid = self.voyage_counter
+        vid = str(self.voyage_counter)
         vessel_imo, laytime_hours, demurrage_buffer, duration_blocks = args
 
         freight = value - demurrage_buffer
@@ -98,12 +99,16 @@ class _MockSimContract:
             "evidence_hash": "",
             "status": 0,  # STATUS_VOYAGE_OPEN
             "verdict": "PENDING",
+            "original_verdict": "PENDING",
             "reason": "Escrow opened.",
             "confidence": 0,
             "measured_delay_hours": 0,
             "max_wave_height_meters": 0,
-            "created_at_block": "0",
-            "expires_at_block": str(duration_blocks),
+            "created_at_time": str(self.mock_current_time),
+            "expires_at_time": str(self.mock_current_time + 86400 * 7),
+            "audit_completed_time": "0",
+            "created_at_block": str(self.mock_current_time),
+            "expires_at_block": str(self.mock_current_time + 86400 * 7),
             "audit_completed_block": "0",
             "is_fast_track": False,
             "co_funder_count": 1,
@@ -119,7 +124,7 @@ class _MockSimContract:
         return _MockTxResult(vid)
 
     def pledge_voyage_escrow(self, args, value=0):
-        vid = args[0]
+        vid = str(args[0])
         v = self.voyages[vid]
         caller_str = str(self.caller).lower()
         self._touch_participant(caller_str)
@@ -136,9 +141,12 @@ class _MockSimContract:
         return _MockTxResult(None)
 
     def submit_voyage_logs(self, args):
-        vid, ais_url, weather_url = args
+        vid = str(args[0])
+        ais_url, weather_url = args[1], args[2]
         v = self.voyages[vid]
         caller_str = str(self.caller).lower()
+        if caller_str == v["charterer"].lower():
+            raise Exception("Role Violation: Charterer cannot act as vessel carrier.")
         self._touch_participant(caller_str)
         v["carrier"] = caller_str
         v["ais_tracking_url"] = ais_url
@@ -148,8 +156,12 @@ class _MockSimContract:
         return _MockTxResult(None)
 
     def adjudicate_demurrage(self, args):
-        vid = args[0]
+        vid = str(args[0])
         v = self.voyages[vid]
+        caller_str = str(self.caller).lower()
+        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
+            raise Exception("Permission Denied: Only charterer, carrier, or owner can trigger adjudication.")
+
         web_mocks = self.client.provider.web_mocks
         llm_mocks = self.client.provider.llm_mocks
 
@@ -178,31 +190,60 @@ class _MockSimContract:
                 break
 
         v["verdict"] = verdict
+        v["original_verdict"] = verdict
         v["confidence"] = confidence
         v["measured_delay_hours"] = delay
         v["max_wave_height_meters"] = waves
         v["reason"] = reason
         v["status"] = 2  # STATUS_AWAITING_PAYOUT
-        v["audit_completed_block"] = "10"
+        v["audit_completed_time"] = str(self.mock_current_time)
+        v["audit_completed_block"] = str(self.mock_current_time)
         return _MockTxResult(None)
 
     def appeal_verdict(self, args, value=0):
-        vid, dispute_reason = args
+        vid = str(args[0])
+        dispute_reason = args[1]
         v = self.voyages[vid]
+        caller_str = str(self.caller).lower()
+        if caller_str != v["charterer"].lower() and caller_str != v["carrier"].lower():
+            raise Exception("Role Violation: Only charterer or carrier can file an appeal.")
+
+        # Cooling off check
+        if self.mock_current_time > int(v["audit_completed_time"]) + 86400:
+            raise Exception("Dispute cooling-off window has expired.")
+
         v["status"] = 6  # STATUS_DISPUTED
-        v["dispute_initiator"] = str(self.caller).lower()
+        v["dispute_initiator"] = caller_str
         v["dispute_bond"] = str(value)
         self.total_maritime_locked += value
         return _MockTxResult(None)
 
     def adjudicate_appeal(self, args):
-        vid, supp_url = args
+        vid = str(args[0])
+        supp_url = args[1]
         v = self.voyages[vid]
+
+        # Steward Requirement 2: Restrict appellate adjudication caller
+        caller_str = str(self.caller).lower()
+        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
+            raise Exception("Permission Denied: Only charterer, carrier, or owner can adjudicate appeal.")
+
+        # Steward Requirement 2: Verify supplemental evidence bound to declared vessel IMO
+        web_mocks = self.client.provider.web_mocks
+        supp_content = ""
+        for _, val in web_mocks.items():
+            if isinstance(val, dict) and "body" in val:
+                supp_content += str(val["body"])
+
         llm_mocks = self.client.provider.llm_mocks
         verdict = "APPEAL_DISMISSED"
         reason = "Appeal dismissed."
 
-        if llm_mocks:
+        # If supplemental log does not contain vessel IMO, dismiss appeal
+        if v["vessel_imo_number"].lower() not in supp_content.lower() and supp_content:
+            verdict = "APPEAL_DISMISSED"
+            reason = f"Supplemental evidence rejected: Not bound to declared vessel IMO {v['vessel_imo_number']}."
+        elif llm_mocks:
             for _, resp in llm_mocks.items():
                 parsed = json.loads(resp)
                 verdict = parsed.get("verdict", verdict)
@@ -224,16 +265,33 @@ class _MockSimContract:
             v["reason"] = f"[APPEAL UPHELD] {reason}"
             self._add_reputation(v["dispute_initiator"], 15)
         else:
-            v["status"] = 4  # STATUS_SETTLED_DEMURRAGE
-            v["verdict"] = "DEMURRAGE_ENFORCED"
-            v["reason"] = f"[APPEAL DISMISSED] {reason}"
+            # Steward Requirement 3: Preserve original verdict and payout when appeal dismissed!
+            orig = v.get("original_verdict", "DEMURRAGE_ENFORCED")
+            if orig == "FORCE_MAJEURE_EXCUSED":
+                v["status"] = 5  # STATUS_SETTLED_FORCE_MAJEURE
+                v["verdict"] = "FORCE_MAJEURE_EXCUSED"
+            elif orig == "CLEAN_ON_TIME":
+                v["status"] = 3  # STATUS_SETTLED_ON_TIME
+                v["verdict"] = "CLEAN_ON_TIME"
+            else:
+                v["status"] = 4  # STATUS_SETTLED_DEMURRAGE
+                v["verdict"] = "DEMURRAGE_ENFORCED"
+            v["reason"] = f"[APPEAL DISMISSED - ORIGINAL VERDICT PRESERVED] {reason}"
             self._add_reputation(v["dispute_initiator"], -15)
 
         return _MockTxResult(None)
 
     def finalize_settlement(self, args):
-        vid = args[0]
+        vid = str(args[0])
         v = self.voyages[vid]
+        caller_str = str(self.caller).lower()
+        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
+            raise Exception("Permission Denied: Only voyage stakeholders can finalize payout.")
+
+        # Cooling off check (24h = 86400s)
+        if self.mock_current_time <= int(v["audit_completed_time"]) + (43200 if v.get("is_fast_track") else 86400):
+            raise Exception("Cooling-off challenge window is still active.")
+
         if v["verdict"] == "FORCE_MAJEURE_EXCUSED":
             v["status"] = 5
         elif v["verdict"] == "CLEAN_ON_TIME":
@@ -244,15 +302,18 @@ class _MockSimContract:
         return _MockTxResult(None)
 
     def cancel_or_reclaim(self, args):
-        vid = args[0]
+        vid = str(args[0])
         v = self.voyages[vid]
+        caller_str = str(self.caller).lower()
+        if caller_str != v["charterer"].lower():
+            raise Exception("Role Violation: Only the charterer can cancel or reclaim booking.")
         v["status"] = 7  # STATUS_CANCELLED
         v["verdict"] = "CANCELLED"
         v["reason"] = "Voyage cancelled and escrow refunded."
         return _MockTxResult(None)
 
     def get_voyage(self, args):
-        vid = args[0]
+        vid = str(args[0])
         return _MockCallResult(json.dumps(self.voyages[vid]))
 
     def get_voyage_count(self, args=None):
@@ -268,7 +329,7 @@ class _MockSimContract:
             "total_maritime_locked": str(self.total_maritime_locked),
             "total_voyages_settled": self.total_voyages_settled,
             "registered_participants": len(self.registered_participants),
-            "owner": self.owner,
+            "owner": str(self.owner),
         }
         return _MockCallResult(json.dumps(data))
 
@@ -282,6 +343,7 @@ class _MockSimContract:
             "reputation_score": score,
             "tier": tier,
             "is_fast_track_eligible": is_fast,
+            "cooling_off_seconds": 43200 if is_fast else 86400,
             "cooling_off_blocks": 12 if is_fast else 24,
             "completed_voyages": self.stats_completed.get(u_addr, 0),
             "force_majeure_weather_verified": self.stats_force_majeure.get(u_addr, 0),
@@ -304,7 +366,7 @@ class _MockSimContract:
         return _MockCallResult(json.dumps(board))
 
     def get_voyage_pledges(self, args):
-        vid = args[0]
+        vid = str(args[0])
         return _MockCallResult(json.dumps(self.syndicate_pledges.get(vid, [])))
 
 
@@ -332,6 +394,7 @@ class _MockSimClient:
             _MockAccount("0x1111111111111111111111111111111111111111"),
             _MockAccount("0x2222222222222222222222222222222222222222"),
             _MockAccount("0x3333333333333333333333333333333333333333"),
+            _MockAccount("0x4444444444444444444444444444444444444444"),
         ]
         self.provider = _MockProvider()
 

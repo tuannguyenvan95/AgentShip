@@ -12,6 +12,7 @@ import {
   Users,
   CheckCircle2,
   Lock,
+  Gavel,
 } from 'lucide-react';
 import { MaritimeVoyage } from '../types/voyage';
 import {
@@ -27,6 +28,7 @@ interface VoyageCardProps {
   onOpenTelemetry: (voyage: MaritimeVoyage) => void;
   onOpenInspector: (voyage: MaritimeVoyage) => void;
   onOpenAppeal: (voyage: MaritimeVoyage) => void;
+  onOpenAdjudicateAppeal?: (voyage: MaritimeVoyage) => void;
   onOpenSyndicate: (voyage: MaritimeVoyage) => void;
   onAdjudicate: (voyageId: string | number) => void;
   onFinalize: (voyageId: string | number) => void;
@@ -40,6 +42,7 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
   onOpenTelemetry,
   onOpenInspector,
   onOpenAppeal,
+  onOpenAdjudicateAppeal,
   onOpenSyndicate,
   onAdjudicate,
   onFinalize,
@@ -338,12 +341,24 @@ export const VoyageCard: React.FC<VoyageCardProps> = ({
           )}
 
           {voyage.status === 6 && (
-            <button
-              onClick={() => onOpenInspector(voyage)}
-              className="px-3 py-1.5 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg shadow-sm transition-colors animate-pulse"
-            >
-              Review Appellate Jury
-            </button>
+            <div className="flex items-center space-x-1.5">
+              <button
+                onClick={() => onOpenAdjudicateAppeal?.(voyage)}
+                disabled={isLoadingAction}
+                className="px-3 py-1.5 text-xs font-bold text-white bg-purple-700 hover:bg-purple-800 rounded-lg shadow-sm transition-colors flex items-center space-x-1"
+                title="Adjudicate appeal with supplemental telemetry (Charterer, Carrier, or Owner)"
+              >
+                <Gavel className="w-3.5 h-3.5" />
+                <span>Adjudicate Appeal</span>
+              </button>
+              <button
+                onClick={() => onOpenInspector(voyage)}
+                className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-lg transition-colors"
+                title="Inspect Appellate Case Dossier"
+              >
+                Inspect
+              </button>
+            </div>
           )}
 
           {(voyage.status === 3 || voyage.status === 4 || voyage.status === 5) && (

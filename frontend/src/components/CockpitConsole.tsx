@@ -12,6 +12,7 @@ import {
   ExternalLink,
   ShieldCheck,
   Hash,
+  Gavel,
 } from 'lucide-react';
 import { MaritimeRadarHUD } from './MaritimeRadarHUD';
 import {
@@ -37,6 +38,7 @@ interface CockpitConsoleProps {
   onOpenTelemetry: (voyage: MaritimeVoyage) => void;
   onOpenInspector: (voyage: MaritimeVoyage) => void;
   onOpenAppeal: (voyage: MaritimeVoyage) => void;
+  onOpenAdjudicateAppeal?: (voyage: MaritimeVoyage) => void;
   onOpenSyndicate: (voyage: MaritimeVoyage) => void;
   onAdjudicate: (voyageId: string | number) => void;
   onFinalize: (voyageId: string | number) => void;
@@ -54,6 +56,7 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
   onOpenTelemetry,
   onOpenInspector,
   onOpenAppeal,
+  onOpenAdjudicateAppeal,
   onOpenSyndicate,
   onAdjudicate,
   onFinalize,
@@ -386,6 +389,18 @@ export const CockpitConsole: React.FC<CockpitConsoleProps> = ({
                     <span>Finalize Settlement Payout</span>
                   </button>
                 </>
+              )}
+
+              {activeVoyage.status === 6 && (
+                <button
+                  onClick={() => onOpenAdjudicateAppeal?.(activeVoyage)}
+                  disabled={isLoadingAction}
+                  className="px-4 py-2 text-xs font-semibold rounded-xl bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white shadow-md transition-all flex items-center space-x-1.5"
+                  title="Trigger GenVM Supreme Admiralty Appellate Court consensus"
+                >
+                  <Gavel className="w-4 h-4" />
+                  <span>Adjudicate Appeal (AI Court)</span>
+                </button>
               )}
             </div>
           </div>

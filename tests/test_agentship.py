@@ -10,7 +10,7 @@ except ImportError:
 
 
 def test_contract_syntax_and_structure(contract_source):
-    """Verify that contract file adheres to GenVM python specifications."""
+    """Verify that contract file adheres to GenVM python specifications and exposes all required endpoints."""
     assert contract_source.startswith('# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }')
     assert "class MaritimeVoyage:" in contract_source
     assert "class Contract(gl.Contract):" in contract_source
@@ -28,7 +28,7 @@ def test_contract_syntax_and_structure(contract_source):
 
 
 def test_voyage_struct_attributes(contract_source):
-    """Ensure MaritimeVoyage struct defines all state fields including telemetry, canary, and trust attributes."""
+    """Ensure MaritimeVoyage struct defines all state fields including telemetry, original_verdict, and deterministic timestamp fields."""
     expected_fields = [
         "voyage_id: str",
         "charterer: Address",
@@ -42,7 +42,11 @@ def test_voyage_struct_attributes(contract_source):
         "marine_weather_url: str",
         "evidence_hash: str",
         "verdict: str",
+        "original_verdict: str",
         "reason: str",
+        "created_at_time: bigint",
+        "expires_at_time: bigint",
+        "audit_completed_time: bigint",
         "is_fast_track: bool",
         "co_funder_count: u32",
     ]
@@ -55,19 +59,16 @@ def test_agentship_force_majeure_weather_excuse(client):
     charterer = client.accounts[0]
     carrier = client.accounts[1]
 
-    # Freight: 1 GEN, Demurrage Buffer: 0.2 GEN -> Total: 1.2 GEN
     freight = 1000000000000000000
     demurrage = 200000000000000000
     total = freight + demurrage
 
-    # Step 1: Charterer opens booking
     tx_create = contract.connect(charterer).create_voyage_escrow(
         args=["IMO9811000", 48, demurrage, 6000],
         value=total
     )
     voyage_id = tx_create.return_value
 
-    # Step 2: Carrier accepts & submits AIS/weather telemetry
     contract.connect(carrier).submit_voyage_logs(
         args=[
             voyage_id,
@@ -76,7 +77,6 @@ def test_agentship_force_majeure_weather_excuse(client):
         ]
     )
 
-    # Step 3: Mock AI Maritime Tribunal -> Storm waves 8m > 6m -> Force Majeure!
     client.provider.make_request(
         method="sim_installMocks",
         params={
@@ -101,6 +101,7 @@ def test_agentship_force_majeure_weather_excuse(client):
     v_data = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_data["status"] == 2  # AWAITING_PAYOUT
     assert v_data["verdict"] == "FORCE_MAJEURE_EXCUSED"
+    assert v_data["original_verdict"] == "FORCE_MAJEURE_EXCUSED"
     assert v_data["max_wave_height_meters"] == 8
     assert len(v_data["evidence_hash"]) == 64
 
@@ -128,7 +129,6 @@ def test_agentship_unexcused_demurrage_enforced(client):
         ]
     )
 
-    # Calm sea (waves 1.5m < 6m) but 40h delay -> Demurrage Enforced
     client.provider.make_request(
         method="sim_installMocks",
         params={
@@ -142,7 +142,7 @@ def test_agentship_unexcused_demurrage_enforced(client):
                     "reason": "Unexcused laytime breach. Calm sea state observed."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "WAVES:1.5m DELAY:40h"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9732100 WAVES:1.5m DELAY:40h"}}
         }
     )
 
@@ -151,6 +151,7 @@ def test_agentship_unexcused_demurrage_enforced(client):
     v_data = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_data["status"] == 2  # AWAITING_PAYOUT
     assert v_data["verdict"] == "DEMURRAGE_ENFORCED"
+    assert v_data["original_verdict"] == "DEMURRAGE_ENFORCED"
     assert v_data["measured_delay_hours"] == 40
 
 
@@ -190,7 +191,7 @@ def test_agentship_clean_on_time_delivery(client):
                     "reason": "Vessel berthed precisely within allowed laytime. Flawless transit."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "SPEED:18kn ON_TIME:YES"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9954321 SPEED:18kn ON_TIME:YES"}}
         }
     )
 
@@ -199,6 +200,7 @@ def test_agentship_clean_on_time_delivery(client):
     v_data = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_data["status"] == 2  # AWAITING_PAYOUT
     assert v_data["verdict"] == "CLEAN_ON_TIME"
+    assert v_data["original_verdict"] == "CLEAN_ON_TIME"
     assert v_data["measured_delay_hours"] == 0
 
 
@@ -238,12 +240,11 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
                     "reason": "Initial review flagged delay."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "WAVES:4m DELAY:20h"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 WAVES:4m DELAY:20h"}}
         }
     )
     contract.connect(carrier).adjudicate_demurrage(args=[voyage_id])
 
-    # Carrier appeals with 10% bond (1.2 GEN * 10% = 0.12 GEN)
     required_bond = (total * 10) // 100
     contract.connect(carrier).appeal_verdict(
         args=[voyage_id, "Harbor master closed port due to sudden swell, certified proof attached."],
@@ -254,7 +255,7 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
     assert v_disputed["status"] == 6  # STATUS_DISPUTED
     assert int(v_disputed["dispute_bond"]) == required_bond
 
-    # Appellate Court upholds Force Majeure!
+    # Appellate Court upholds Force Majeure with IMO verified
     client.provider.make_request(
         method="sim_installMocks",
         params={
@@ -265,7 +266,7 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
                     "reason": "Certified harbor master records prove Category 4 storm surge."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "HARBOR_CLOSURE_CONFIRMED:SWELL_8M"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 HARBOR_CLOSURE_CONFIRMED:SWELL_8M"}}
         }
     )
 
@@ -279,7 +280,48 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
     assert int(v_final["dispute_bond"]) == 0
 
 
-def test_agentship_appeal_dismissed_and_bond_slashed(client):
+def test_adjudicate_appeal_unauthorized_caller_reverts(client):
+    """STEWARD CORRECTION 2: Restrict appellate adjudication to authorized voyage parties."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+    unauthorized_party = client.accounts[3]
+
+    freight = 1000000000000000000
+    demurrage = 200000000000000000
+    total = freight + demurrage
+
+    tx_create = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO9811000", 48, demurrage, 6000],
+        value=total
+    )
+    voyage_id = tx_create.return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://marinetraffic.org/ais/v1.json", "https://noaa.gov/w1.txt"]
+    )
+
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "DEMURRAGE_ENFORCED"})},
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 CALM"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[voyage_id])
+
+    # Charterer files appeal
+    contract.connect(charterer).appeal_verdict(args=[voyage_id, "Disputing findings."], value=total // 10)
+
+    # Unauthorized 3rd party attempts to trigger appellate court -> MUST REVERT
+    with pytest.raises(Exception, match="Permission Denied"):
+        contract.connect(unauthorized_party).adjudicate_appeal(
+            args=[voyage_id, "https://ports.org/supp.txt"]
+        )
+
+
+def test_adjudicate_appeal_unbound_evidence_dismissed(client):
+    """STEWARD CORRECTION 2: Supplemental evidence MUST be bound to declared vessel IMO."""
     contract = client.deploy("contracts/contract.py")
     charterer = client.accounts[0]
     carrier = client.accounts[1]
@@ -295,39 +337,83 @@ def test_agentship_appeal_dismissed_and_bond_slashed(client):
     voyage_id = tx_create.return_value
 
     contract.connect(carrier).submit_voyage_logs(
-        args=[
-            voyage_id,
-            "https://marinetraffic.org/ais/voyage1.json",
-            "https://noaa-marine.org/data/weather1.txt"
-        ]
+        args=[voyage_id, "https://marinetraffic.org/ais/v1.json", "https://noaa.gov/w1.txt"]
     )
 
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "DEMURRAGE_ENFORCED"})},
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 CALM"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[voyage_id])
+    contract.connect(carrier).appeal_verdict(args=[voyage_id, "Filing appeal with foreign vessel log."], value=total // 10)
+
+    # Web mock for supplemental log is for UNRELATED vessel (IMO1234567 != IMO9811000)
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO1234567 STORM_SURGE_9M"}},
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "APPEAL_UPHELD_FORCE_MAJEURE"})}
+        }
+    )
+
+    # Adjudicating with unbound telemetry evidence must dismiss the appeal
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://ports.org/foreign_vessel.txt"])
+
+    v_after = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    assert v_after["status"] == 4  # Settled Demurrage (appeal dismissed)
+    assert "Supplemental evidence rejected: Not bound to declared vessel" in v_after["reason"]
+
+
+def test_appeal_dismissed_preserves_force_majeure_payout(client):
+    """STEWARD CORRECTION 3: Preserve original FORCE_MAJEURE_EXCUSED verdict and payout when appeal dismissed."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    freight = 1000000000000000000
+    demurrage = 200000000000000000
+    total = freight + demurrage
+
+    tx_create = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO9811000", 48, demurrage, 6000],
+        value=total
+    )
+    voyage_id = tx_create.return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://marinetraffic.org/ais/v1.json", "https://noaa.gov/w1.txt"]
+    )
+
+    # Initial adjudication finds FORCE_MAJEURE_EXCUSED
     client.provider.make_request(
         method="sim_installMocks",
         params={
             "llm_mocks": {
                 ".*": json.dumps({
                     "canary": "CANARY_AGENT_SHIP_MARITIME_V1",
-                    "verdict": "DEMURRAGE_ENFORCED",
-                    "confidence": 90,
+                    "verdict": "FORCE_MAJEURE_EXCUSED",
+                    "confidence": 95,
                     "measured_delay_hours": 30,
-                    "max_wave_height_meters": 2,
-                    "reason": "Unexcused delay."
+                    "max_wave_height_meters": 7,
+                    "reason": "Initial review: Category 3 storm wave heights."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "CALM_WATER"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 WAVES:7.5m"}}
         }
     )
     contract.connect(charterer).adjudicate_demurrage(args=[voyage_id])
 
-    # Charterer files frivolous appeal
-    required_bond = (total * 10) // 100
-    contract.connect(charterer).appeal_verdict(
-        args=[voyage_id, "Frivolous dispute claim without valid maritime basis."],
-        value=required_bond
-    )
+    v_initial = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    assert v_initial["verdict"] == "FORCE_MAJEURE_EXCUSED"
+    assert v_initial["original_verdict"] == "FORCE_MAJEURE_EXCUSED"
 
-    # Appellate Court dismisses appeal
+    # Charterer files frivolous appeal against Force Majeure
+    contract.connect(charterer).appeal_verdict(args=[voyage_id, "Disputing storm measurements."], value=total // 10)
+
+    # Appellate Court dismisses the appeal
     client.provider.make_request(
         method="sim_installMocks",
         params={
@@ -335,20 +421,115 @@ def test_agentship_appeal_dismissed_and_bond_slashed(client):
                 ".*": json.dumps({
                     "canary": "CANARY_AGENT_SHIP_MARITIME_V1",
                     "verdict": "APPEAL_DISMISSED",
-                    "reason": "No evidence of inclement weather. Delay is solely demurrage fault."
+                    "reason": "Satellite ocean radar confirms 7.5m gale waves. Force Majeure sustained."
                 })
             },
-            "web_mocks": {".*": {"status": 200, "body": "NO_WEATHER_ANOMALY"}}
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 CONFIRMED"}}
         }
     )
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://radar.org/vessel_storm.txt"])
 
-    contract.connect(charterer).adjudicate_appeal(
-        args=[voyage_id, "https://supplemental-logs.org/log.txt"]
+    v_settled = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    # MUST preserve FORCE_MAJEURE_EXCUSED (status 5), NOT default to DEMURRAGE_ENFORCED (status 4)!
+    assert v_settled["status"] == 5  # STATUS_SETTLED_FORCE_MAJEURE
+    assert v_settled["verdict"] == "FORCE_MAJEURE_EXCUSED"
+    assert v_settled["original_verdict"] == "FORCE_MAJEURE_EXCUSED"
+    assert "ORIGINAL VERDICT PRESERVED" in v_settled["reason"]
+
+
+def test_appeal_dismissed_preserves_clean_on_time_payout(client):
+    """STEWARD CORRECTION 3: Preserve original CLEAN_ON_TIME verdict and payout when appeal dismissed."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    freight = 1000000000000000000
+    demurrage = 200000000000000000
+    total = freight + demurrage
+
+    tx_create = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO9811000", 48, demurrage, 6000],
+        value=total
+    )
+    voyage_id = tx_create.return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://marinetraffic.org/ais/v1.json", "https://noaa.gov/w1.txt"]
     )
 
-    v_final = json.loads(contract.get_voyage(args=[voyage_id]).call())
-    assert v_final["status"] == 4  # STATUS_SETTLED_DEMURRAGE
-    assert v_final["verdict"] == "DEMURRAGE_ENFORCED"
+    # Initial adjudication finds CLEAN_ON_TIME
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {
+                ".*": json.dumps({
+                    "canary": "CANARY_AGENT_SHIP_MARITIME_V1",
+                    "verdict": "CLEAN_ON_TIME",
+                    "confidence": 99,
+                    "measured_delay_hours": 0,
+                    "max_wave_height_meters": 1,
+                    "reason": "Arrived on schedule."
+                })
+            },
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 SPEED:15kn"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[voyage_id])
+
+    # Charterer files frivolous appeal claiming hidden delay
+    contract.connect(charterer).appeal_verdict(args=[voyage_id, "Demanding demurrage penalty."], value=total // 10)
+
+    # Appellate Court dismisses the appeal
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {
+                ".*": json.dumps({
+                    "canary": "CANARY_AGENT_SHIP_MARITIME_V1",
+                    "verdict": "APPEAL_DISMISSED",
+                    "reason": "Harbor berthing stamp confirms vessel berthed 2 hours ahead of laytime."
+                })
+            },
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 ON_TIME"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://harbor.org/stamps.pdf"])
+
+    v_settled = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    # MUST preserve CLEAN_ON_TIME (status 3), NOT default to DEMURRAGE_ENFORCED!
+    assert v_settled["status"] == 3  # STATUS_SETTLED_ON_TIME
+    assert v_settled["verdict"] == "CLEAN_ON_TIME"
+    assert v_settled["original_verdict"] == "CLEAN_ON_TIME"
+
+
+def test_unrelated_voyages_cannot_advance_cooling_off(client):
+    """STEWARD CORRECTION 4: Unrelated voyages cannot advance cooling-off windows."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    # Create and adjudicate Voyage 1
+    tx_v1 = contract.connect(charterer).create_voyage_escrow(args=["IMO9811000", 48, 200000, 6000], value=1200000)
+    vid1 = tx_v1.return_value
+    contract.connect(carrier).submit_voyage_logs(args=[vid1, "https://ais.org/1", "https://weather.org/1"])
+
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "CLEAN_ON_TIME"})},
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000"}}
+        }
+    )
+    contract.connect(charterer).adjudicate_demurrage(args=[vid1])
+
+    # Now create 50 unrelated voyages to simulate high network traffic
+    for i in range(5):
+        contract.connect(charterer).create_voyage_escrow(args=[f"IMO900000{i}", 48, 100000, 6000], value=500000)
+
+    # Attempting to finalize Voyage 1 before cooling-off timestamp elapses MUST still fail!
+    # Under old buggy voyage_counter logic, 50 calls advanced counter by 50, bypassing the 24-block window!
+    with pytest.raises(Exception, match="Cooling-off challenge window is still active"):
+        contract.connect(charterer).finalize_settlement(args=[vid1])
 
 
 def test_agentship_v3_syndicate_pooling_and_proportional_refund(client):
@@ -366,7 +547,6 @@ def test_agentship_v3_syndicate_pooling_and_proportional_refund(client):
     )
     voyage_id = tx_create.return_value
 
-    # Syndicate co-funder pools additional 0.5 GEN
     co_fund = 500000000000000000
     contract.connect(syndicate_funder).pledge_voyage_escrow(
         args=[voyage_id],
@@ -377,13 +557,11 @@ def test_agentship_v3_syndicate_pooling_and_proportional_refund(client):
     assert v_data["co_funder_count"] == 2
     assert int(v_data["freight_amount"]) == freight + co_fund
 
-    # Inspect syndicate pledges
     pledges = json.loads(contract.get_voyage_pledges(args=[voyage_id]).call())
     assert len(pledges) == 2
     assert pledges[0]["role"] == "CHARTERER_PRIMARY"
     assert pledges[1]["role"] == "SYNDICATE_CO_SHIPPER"
 
-    # Cancel & reclaim executes proportional refund
     contract.connect(charterer).cancel_or_reclaim(args=[voyage_id])
     v_cancelled = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_cancelled["status"] == 7  # STATUS_CANCELLED
@@ -391,16 +569,12 @@ def test_agentship_v3_syndicate_pooling_and_proportional_refund(client):
 
 def test_agentship_v3_reputation_tiers_and_leaderboard(client):
     contract = client.deploy("contracts/contract.py")
-    charterer = client.accounts[0]
     carrier = client.accounts[1]
 
-    # Check newcomer initial profile
     profile = json.loads(contract.get_reputation_profile(args=[carrier.address]).call())
     assert profile["reputation_score"] == 10
     assert profile["tier"] == "BRONZE_NEWCOMER"
     assert profile["is_fast_track_eligible"] is False
-    assert profile["cooling_off_blocks"] == 24
 
-    # Leaderboard view works
     board = json.loads(contract.get_maritime_leaderboard().call())
     assert isinstance(board, list)

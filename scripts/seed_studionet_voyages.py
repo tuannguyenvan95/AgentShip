@@ -24,8 +24,8 @@ def main():
 
     # 1. Create Voyage #1
     print("\n[*] Creating Voyage #1: IMO9811000 (Rotterdam to Singapore Express)...", flush=True)
-    demurrage_buf1 = int(0.01 * 1e18)
-    total_deposit1 = int(0.05 * 1e18)
+    demurrage_buf1 = int(0.0005 * 1e18)
+    total_deposit1 = int(0.002 * 1e18)
     tx1 = client.write_contract(
         address=CONTRACT_ADDRESS,
         function_name="create_voyage_escrow",
@@ -43,9 +43,9 @@ def main():
 
     carrier_bal = client.get_balance(carrier_acct.address)
     print(f"[+] Carrier Address: {carrier_acct.address} (Balance: {carrier_bal / 1e18} GEN)", flush=True)
-    if carrier_bal < 0.01 * 1e18:
-        print("[*] Funding carrier account with 0.05 GEN...", flush=True)
-        funding_tx = client.send_transaction(to=carrier_acct.address, value=int(0.05 * 1e18))
+    if carrier_bal < 0.001 * 1e18:
+        print("[*] Funding carrier account with 0.005 GEN...", flush=True)
+        funding_tx = client.send_transaction(to=carrier_acct.address, value=int(0.005 * 1e18))
         client.wait_for_transaction_receipt(funding_tx)
 
     print("\n[*] Carrier submitting AIS & Marine Weather logs for Voyage #1...", flush=True)
@@ -53,9 +53,9 @@ def main():
         address=CONTRACT_ADDRESS,
         function_name="submit_voyage_logs",
         args=[
-            1,
-            "https://marinetraffic.org/ais/voyage_rotterdam_singapore.json",
-            "https://noaa-marine.org/data/typhoon_north_sea.txt"
+            "1",
+            "https://raw.githubusercontent.com/tuannguyenvan95/AgentShip/main/telemetry/sample_ais_telemetry.json",
+            "https://raw.githubusercontent.com/tuannguyenvan95/AgentShip/main/telemetry/sample_weather_feed.txt"
         ],
         value=0
     )
@@ -65,8 +65,8 @@ def main():
 
     # 3. Create Voyage #2
     print("\n[*] Creating Voyage #2: IMO9732100 (Evergreen Pacific Route)...", flush=True)
-    demurrage_buf2 = int(0.01 * 1e18)
-    total_deposit2 = int(0.03 * 1e18)
+    demurrage_buf2 = int(0.0005 * 1e18)
+    total_deposit2 = int(0.002 * 1e18)
     tx2 = client.write_contract(
         address=CONTRACT_ADDRESS,
         function_name="create_voyage_escrow",

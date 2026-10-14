@@ -13,10 +13,14 @@ export interface MaritimeVoyage {
   evidence_hash: string;
   status: number; // 0..7
   verdict: string;
+  original_verdict?: string;
   reason: string;
   confidence: number;
   measured_delay_hours: number;
   max_wave_height_meters: number;
+  created_at_time?: string;
+  expires_at_time?: string;
+  audit_completed_time?: string;
   created_at_block: string;
   expires_at_block: string;
   audit_completed_block: string;
@@ -29,6 +33,7 @@ export interface ReputationDossier {
   reputation_score: number;
   tier: string;
   is_fast_track_eligible: boolean;
+  cooling_off_seconds?: number;
   cooling_off_blocks: number;
   completed_voyages: number;
   force_majeure_weather_verified: number;
