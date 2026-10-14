@@ -2,7 +2,7 @@
 
 > **Track:** Supply Chain / Real World Assets (RWA) / TradeFi / Maritime Law  
 > **Target Network:** GenLayer StudioNet (Chain ID: `61999` / Hex: `0xF22F`, RPC: `https://studio.genlayer.com/api`)  
-> **Deployed Intelligent Contract (v3.0):** [`0x133f95019925c8fAC02BE0bD1b86F947AA50F13F`](https://studio.genlayer.com)  
+> **Deployed Intelligent Contract (v3.0):** [`0x3e9E5A6Cf01223AaCbd2Ebb3db4Ba673048E6B4d`](https://studio.genlayer.com)  
 > **GitHub Repository:** [https://github.com/tuannguyenvan95/AgentShip](https://github.com/tuannguyenvan95/AgentShip)  
 > **Live Production dApp:** [https://agentship-one.vercel.app](https://agentship-one.vercel.app) (Mirror: [https://frontend-three-drab-v46xpao16q.vercel.app](https://frontend-three-drab-v46xpao16q.vercel.app))  
 
