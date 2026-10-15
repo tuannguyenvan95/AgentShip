@@ -3,7 +3,7 @@ import json
 import time
 from genlayer_py import create_client, create_account, studionet
 
-CONTRACT_ADDRESS = "0x3e9E5A6Cf01223AaCbd2Ebb3db4Ba673048E6B4d"
+CONTRACT_ADDRESS = "0x7B6c64e201128A3d96348B4281d88b0acCc2E2aE"
 CHARTERER_PK = "0x1b807b1df022a40f872596b11565e6b6856547dc66996bd3d5a85b376ea3a0ef"
 CARRIER_PK = "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d"
 
