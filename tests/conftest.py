@@ -4,6 +4,7 @@ import hashlib
 import sys
 import os
 import types
+import collections
 from pathlib import Path
 
 CONTRACTS_DIR = Path(__file__).parent.parent / "contracts"
@@ -334,7 +335,7 @@ class _SimClient:
         # Initialize GenVM storage structures
         inst.voyages = {}
         inst.voyage_ids = []
-        inst.voyage_syndicates = {}
+        inst.voyage_syndicates = collections.defaultdict(list)
         inst.reputation_scores = {}
         inst.stats_completed = {}
         inst.stats_force_majeure = {}

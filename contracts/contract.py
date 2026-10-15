@@ -470,10 +470,8 @@ class Contract(gl.Contract):
 
         self.voyage_ids.append(voyage_id)
 
-        if voyage_id not in self.voyage_syndicates:
-            self.voyage_syndicates[voyage_id] = [SyndicateFunder(funder=charterer_addr, amount=freight, role="CHARTERER_PRIMARY")]
-        else:
-            self.voyage_syndicates[voyage_id].append(SyndicateFunder(funder=charterer_addr, amount=freight, role="CHARTERER_PRIMARY"))
+        # GenVM Safe: Append directly without Python list assignment
+        self.voyage_syndicates[voyage_id].append(SyndicateFunder(funder=charterer_addr, amount=freight, role="CHARTERER_PRIMARY"))
 
         self.total_maritime_locked = self.total_maritime_locked + total_deposit
 
@@ -508,8 +506,7 @@ class Contract(gl.Contract):
         v.freight_amount = v.freight_amount + pledge_val
 
         v.co_funder_count = v.co_funder_count + u32(1)
-        if vid not in self.voyage_syndicates:
-            self.voyage_syndicates[vid] = []
+        # GenVM Safe: Append directly without Python list assignment
         self.voyage_syndicates[vid].append(SyndicateFunder(funder=funder, amount=pledge_val, role="SYNDICATE_CO_SHIPPER"))
 
         self.total_maritime_locked = self.total_maritime_locked + pledge_val
