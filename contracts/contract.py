@@ -678,6 +678,7 @@ Respond ONLY with valid JSON:
             _pay_native(appellant, bond_val)
             self._add_reputation(appellant_str, 15)
             self.stats_appeals_won[appellant_str] = self.stats_appeals_won.get(appellant_str, u32(0)) + u32(1)
+            self.stats_appeals_lost[counterparty_str] = self.stats_appeals_lost.get(counterparty_str, u32(0)) + u32(1)
 
         elif app_verdict == "APPEAL_UPHELD_ON_TIME":
             v.status = STATUS_SETTLED_ON_TIME
@@ -688,6 +689,7 @@ Respond ONLY with valid JSON:
             _pay_native(appellant, bond_val)
             self._add_reputation(appellant_str, 15)
             self.stats_appeals_won[appellant_str] = self.stats_appeals_won.get(appellant_str, u32(0)) + u32(1)
+            self.stats_appeals_lost[counterparty_str] = self.stats_appeals_lost.get(counterparty_str, u32(0)) + u32(1)
 
         else:
             # APPEAL DISMISSED: Preserve original verdict and payout!
@@ -695,6 +697,7 @@ Respond ONLY with valid JSON:
             self._add_reputation(appellant_str, -15)
             self._add_reputation(counterparty_str, 10)
             self.stats_appeals_lost[appellant_str] = self.stats_appeals_lost.get(appellant_str, u32(0)) + u32(1)
+            self.stats_appeals_won[counterparty_str] = self.stats_appeals_won.get(counterparty_str, u32(0)) + u32(1)
 
             if v.original_verdict == "FORCE_MAJEURE_EXCUSED":
                 v.status = STATUS_SETTLED_FORCE_MAJEURE
