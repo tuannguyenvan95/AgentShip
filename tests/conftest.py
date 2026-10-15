@@ -336,6 +336,7 @@ class _SimClient:
         inst.voyages = {}
         inst.voyage_ids = []
         inst.voyage_syndicates = collections.defaultdict(list)
+        inst.syndicate_pledges_json = {}
         inst.reputation_scores = {}
         inst.stats_completed = {}
         inst.stats_force_majeure = {}
