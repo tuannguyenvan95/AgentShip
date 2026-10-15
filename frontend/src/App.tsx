@@ -337,17 +337,21 @@ export const App: React.FC = () => {
   const handleFileAppeal = async (
     voyageId: string | number,
     disputeReason: string,
+    supplementalLogUrl: string,
     bondWei: bigint
   ) => {
-    await sendContractTransaction('appeal_verdict', [String(voyageId), disputeReason], bondWei);
+    await sendContractTransaction(
+      'appeal_verdict',
+      [String(voyageId), disputeReason, supplementalLogUrl],
+      bondWei
+    );
     setIsAppealOpen(false);
   };
 
   const handleAdjudicateAppeal = async (
-    voyageId: string | number,
-    supplementalLogUrl: string
+    voyageId: string | number
   ) => {
-    await sendContractTransaction('adjudicate_appeal', [String(voyageId), supplementalLogUrl], BigInt(0));
+    await sendContractTransaction('adjudicate_appeal', [String(voyageId)], BigInt(0));
     setIsAdjudicateAppealOpen(false);
   };
 

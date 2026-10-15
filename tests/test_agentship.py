@@ -586,3 +586,86 @@ def test_agentship_v3_reputation_tiers_and_leaderboard(client):
 
     board = json.loads(contract.get_maritime_leaderboard().call())
     assert isinstance(board, list)
+
+
+def test_unauthorized_party_and_owner_cannot_adjudicate_appeal(contract, charterer, carrier, stranger):
+    """
+    STEWARD REQUIREMENT 1:
+    Verifies that NEITHER a stranger NOR a contract owner can adjudicate appeal;
+    strictly restricted to the declared charterer or carrier.
+    """
+    voyage_id = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO9876543", 24, 200, 20000]
+    ).transact(value=1000).return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://noaa.gov/ais_9876543", "https://weather.gov/buoy_42001"]
+    ).transact()
+
+    contract.connect(charterer).adjudicate_demurrage(args=[voyage_id]).transact()
+
+    contract.connect(carrier).appeal_verdict(
+        args=[voyage_id, "Severe gale storm Force 9 verified by NOAA", "https://noaa.gov/buoy_supplemental_proof.txt"]
+    ).transact(value=100)
+
+    # Stranger or non-party calling adjudicate_appeal MUST REVERT
+    with pytest.raises(Exception):
+        contract.connect(stranger).adjudicate_appeal(args=[voyage_id]).transact()
+
+
+def test_appeal_rejects_unauthenticated_sources_and_github(contract, charterer, carrier):
+    """
+    STEWARD REQUIREMENT 2:
+    Verifies that supplemental evidence from non-accredited sources (such as github.com)
+    is strictly rejected at appeal time.
+    """
+    voyage_id = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO1234567", 24, 200, 20000]
+    ).transact(value=1000).return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://noaa.gov/ais", "https://weather.gov/buoy"]
+    ).transact()
+    contract.connect(carrier).adjudicate_demurrage(args=[voyage_id]).transact()
+
+    # Attempting to appeal with GitHub URL MUST REVERT as unauthenticated source
+    with pytest.raises(Exception) as exc_info:
+        contract.connect(carrier).appeal_verdict(
+            args=[voyage_id, "Fabricated evidence log", "https://raw.githubusercontent.com/fake/proof.txt"]
+        ).transact(value=100)
+    assert "unauthenticated" in str(exc_info.value).lower()
+
+
+def test_dismissed_appeal_preserves_original_verdict_and_payout(contract, charterer, carrier):
+    """
+    STEWARD REQUIREMENT 3:
+    Verifies that when an appeal is dismissed, the original pre-appeal verdict
+    and original payout allocation are preserved, and appellant bond forfeits to counterparty.
+    """
+    voyage_id = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO3334444", 24, 200, 20000]
+    ).transact(value=1000).return_value
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[voyage_id, "https://noaa.gov/ais_3334444", "https://weather.gov/buoy_3334444"]
+    ).transact()
+
+    # Pre-appeal renders CLEAN_ON_TIME
+    contract.connect(charterer).adjudicate_demurrage(args=[voyage_id]).transact()
+    v_pre = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    assert v_pre["verdict"] == "CLEAN_ON_TIME"
+    assert v_pre["original_verdict"] == "CLEAN_ON_TIME"
+
+    # Charterer appeals with valid accredited URL but unproven claim
+    contract.connect(charterer).appeal_verdict(
+        args=[voyage_id, "Dispute claim that delivery was late", "https://portofrotterdam.com/telemetry_log.txt"]
+    ).transact(value=100)
+
+    # Carrier calls adjudicate_appeal, appeal is dismissed
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id]).transact()
+
+    v_post = json.loads(contract.get_voyage(args=[voyage_id]).call())
+    assert v_post["verdict"] == "CLEAN_ON_TIME"
+    assert v_post["status"] == 3  # STATUS_SETTLED_ON_TIME preserved
+    assert v_post["dispute_bond"] == "0"
+

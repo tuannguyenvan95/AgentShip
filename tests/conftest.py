@@ -59,6 +59,9 @@ class _MockTxResult:
     def __init__(self, return_value):
         self.return_value = return_value
 
+    def transact(self, value=0):
+        return self
+
 
 class MockGL:
     class Contract:
@@ -184,15 +187,30 @@ class DeployedContractWrapper:
             mock_gl_inst.nondet.exec_prompt = staticmethod(mock_exec_prompt)
 
     def create_voyage_escrow(self, args, value=0):
-        self._prepare_call(value)
-        v_imo, laytime, demurrage_buf, dur_blocks = args
-        ret = self.contract.create_voyage_escrow(
-            str(v_imo),
-            MockBigInt(laytime),
-            MockBigInt(demurrage_buf),
-            MockBigInt(dur_blocks)
-        )
-        return _MockTxResult(ret)
+        def _exec(val):
+            self._prepare_call(val)
+            v_imo, laytime, demurrage_buf, dur_blocks = args
+            return self.contract.create_voyage_escrow(
+                str(v_imo),
+                MockBigInt(laytime),
+                MockBigInt(demurrage_buf),
+                MockBigInt(dur_blocks)
+            )
+
+        if value > 0:
+            ret = _exec(value)
+            return _MockTxResult(ret)
+
+        class _LazyTx:
+            def __init__(self, exec_fn):
+                self.exec_fn = exec_fn
+            def transact(self, value=0):
+                ret = self.exec_fn(value)
+                return _MockTxResult(ret)
+            @property
+            def return_value(self):
+                return self.transact(0).return_value
+        return _LazyTx(_exec)
 
     def pledge_voyage_escrow(self, args, value=0):
         self._prepare_call(value)
@@ -213,15 +231,37 @@ class DeployedContractWrapper:
         return _MockTxResult(ret)
 
     def appeal_verdict(self, args, value=0):
-        self._prepare_call(value)
-        vid, dispute_reason = args
-        ret = self.contract.appeal_verdict(str(vid), str(dispute_reason))
-        return _MockTxResult(ret)
+        def _exec(val):
+            self._prepare_call(val)
+            vid = str(args[0])
+            dispute_reason = str(args[1]) if len(args) > 1 else "Dispute justification for appeal."
+            supp_url = str(args[2]) if len(args) > 2 else "https://noaa.gov/telemetry_proof.txt"
+            return self.contract.appeal_verdict(vid, dispute_reason, supp_url)
+
+        if value > 0:
+            ret = _exec(value)
+            return _MockTxResult(ret)
+
+        class _LazyTx:
+            def __init__(self, exec_fn):
+                self.exec_fn = exec_fn
+            def transact(self, value=0):
+                ret = self.exec_fn(value)
+                return _MockTxResult(ret)
+            @property
+            def return_value(self):
+                return self.transact(0).return_value
+        return _LazyTx(_exec)
 
     def adjudicate_appeal(self, args):
         self._prepare_call(0)
-        vid, supp_url = args
-        ret = self.contract.adjudicate_appeal(str(vid), str(supp_url))
+        vid = str(args[0])
+        if len(args) > 1 and str(args[1]).strip():
+            supp_url = str(args[1]).strip()
+            v = self.contract.voyages.get(vid)
+            if v:
+                v.appeal_evidence_url = supp_url
+        ret = self.contract.adjudicate_appeal(vid)
         return _MockTxResult(ret)
 
     def finalize_settlement(self, args):
@@ -294,6 +334,7 @@ class _SimClient:
         # Initialize GenVM storage structures
         inst.voyages = {}
         inst.voyage_ids = []
+        inst.voyage_syndicates = {}
         inst.reputation_scores = {}
         inst.stats_completed = {}
         inst.stats_force_majeure = {}
@@ -301,7 +342,6 @@ class _SimClient:
         inst.stats_appeals_won = {}
         inst.stats_appeals_lost = {}
         inst.registered_registry = {}
-        inst.syndicate_pledges_json = {}
         return DeployedContractWrapper(inst, self)
 
 
@@ -309,3 +349,23 @@ class _SimClient:
 def client():
     """Provides a client instance for executing behavioral tests against the SUBMITTED CONTRACT directly."""
     return _SimClient()
+
+
+@pytest.fixture
+def contract(client):
+    return client.deploy("contracts/contract.py")
+
+
+@pytest.fixture
+def charterer(client):
+    return client.accounts[0]
+
+
+@pytest.fixture
+def carrier(client):
+    return client.accounts[1]
+
+
+@pytest.fixture
+def stranger(client):
+    return client.accounts[3]

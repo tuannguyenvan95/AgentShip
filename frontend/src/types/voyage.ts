@@ -10,6 +10,8 @@ export interface MaritimeVoyage {
   laytime_hours_allowed: number;
   ais_tracking_url: string;
   marine_weather_url: string;
+  appeal_evidence_url?: string;
+  dispute_reason?: string;
   evidence_hash: string;
   status: number; // 0..7
   verdict: string;

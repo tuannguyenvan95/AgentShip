@@ -107,8 +107,9 @@ export const CONTRACT_ABI = [
     name: "appeal_verdict",
     type: "function",
     inputs: [
-      { name: "voyage_id", type: "u64" },
+      { name: "voyage_id", type: "string" },
       { name: "dispute_reason", type: "string" },
+      { name: "supplemental_log_url", type: "string" },
     ],
     outputs: [],
   },
@@ -116,8 +117,7 @@ export const CONTRACT_ABI = [
     name: "adjudicate_appeal",
     type: "function",
     inputs: [
-      { name: "voyage_id", type: "u64" },
-      { name: "supplemental_log_url", type: "string" },
+      { name: "voyage_id", type: "string" },
     ],
     outputs: [],
   },

@@ -7,7 +7,7 @@ interface AdjudicateAppealModalProps {
   voyage: MaritimeVoyage | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (voyageId: string | number, supplementalLogUrl: string) => void;
+  onSubmit: (voyageId: string | number) => void;
   isSubmitting: boolean;
 }
 
@@ -18,16 +18,11 @@ export const AdjudicateAppealModal: React.FC<AdjudicateAppealModalProps> = ({
   onSubmit,
   isSubmitting,
 }) => {
-  const [supplementalUrl, setSupplementalUrl] = useState(
-    'https://raw.githubusercontent.com/tuannguyenvan95/AgentShip/main/telemetry/sample_supplemental_evidence.txt'
-  );
-
   if (!isOpen || !voyage) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplementalUrl.trim().startsWith('http')) return;
-    onSubmit(voyage.voyage_id, supplementalUrl.trim());
+    onSubmit(voyage.voyage_id);
   };
 
   return (
@@ -72,22 +67,20 @@ export const AdjudicateAppealModal: React.FC<AdjudicateAppealModalProps> = ({
 
           <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-slate-700">
-              Supplemental Maritime Telemetry URL (Must be bound to IMO {voyage.vessel_imo_number})
+              Locked Appellant Supplemental Evidence (Committed On-Chain)
             </label>
             <div className="relative">
-              <FileText className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+              <FileText className="absolute left-3 top-3 w-4 h-4 text-purple-500" />
               <input
-                type="url"
-                required
-                value={supplementalUrl}
-                onChange={(e) => setSupplementalUrl(e.target.value)}
-                placeholder="https://port-authority.org/certified_logs.txt"
-                className="w-full pl-9 pr-3 py-2 text-xs font-mono bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600 transition-all text-slate-900"
+                type="text"
+                readOnly
+                value={voyage.appeal_evidence_url || 'https://noaa.gov/weather/gale_storm_warning.txt'}
+                className="w-full pl-9 pr-3 py-2 text-xs font-mono bg-slate-100 border border-slate-300 rounded-xl text-slate-800 cursor-not-allowed select-all"
               />
             </div>
             <p className="text-[11px] text-slate-500 flex items-center space-x-1">
               <ShieldCheck className="w-3.5 h-3.5 text-purple-600 inline" />
-              <span>Evidence without matching vessel IMO {voyage.vessel_imo_number} will be dismissed.</span>
+              <span>Evidence locked on-chain by bonded appellant; immutable against tampering.</span>
             </p>
           </div>
 

@@ -7,7 +7,7 @@ interface AppealModalProps {
   voyage: MaritimeVoyage | null;
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (voyageId: string | number, disputeReason: string, bondWei: bigint) => void;
+  onSubmit: (voyageId: string | number, disputeReason: string, supplementalLogUrl: string, bondWei: bigint) => void;
   isSubmitting: boolean;
 }
 
@@ -21,6 +21,9 @@ export const AppealModal: React.FC<AppealModalProps> = ({
   const [reason, setReason] = useState(
     'Harbor master officially closed port due to severe cyclonic swell.'
   );
+  const [supplementalUrl, setSupplementalUrl] = useState(
+    'https://noaa.gov/weather/gale_storm_warning.txt'
+  );
 
   if (!isOpen || !voyage) return null;
 
@@ -30,8 +33,8 @@ export const AppealModal: React.FC<AppealModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (reason.trim().length < 10) return;
-    onSubmit(voyage.voyage_id, reason.trim(), bondWei);
+    if (reason.trim().length < 10 || !supplementalUrl.trim().startsWith('http')) return;
+    onSubmit(voyage.voyage_id, reason.trim(), supplementalUrl.trim(), bondWei);
   };
 
   return (
@@ -77,7 +80,7 @@ export const AppealModal: React.FC<AppealModalProps> = ({
             <textarea
               required
               minLength={10}
-              rows={4}
+              rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="State the verifiable maritime facts (e.g. harbor closure notices, cyclone reports, or incorrect laytime calculation)..."
@@ -85,6 +88,23 @@ export const AppealModal: React.FC<AppealModalProps> = ({
             />
             <span className="text-[11px] text-slate-500 mt-1 block">
               Minimum 10 characters required. Will be evaluated by Supreme Appellate AI Jury.
+            </span>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1">
+              Supplemental Accredited Maritime Evidence URL
+            </label>
+            <input
+              type="url"
+              required
+              value={supplementalUrl}
+              onChange={(e) => setSupplementalUrl(e.target.value)}
+              placeholder="https://noaa.gov/weather/storm.txt"
+              className="w-full px-3.5 py-2 text-xs font-mono font-medium text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-rose-500 bg-white shadow-2xs"
+            />
+            <span className="text-[11px] text-slate-500 mt-1 block">
+              Must originate from an accredited maritime domain (NOAA, ECMWF, Port Authority, MarineTraffic). Note: GitHub links are strictly rejected.
             </span>
           </div>
 
