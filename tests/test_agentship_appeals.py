@@ -27,8 +27,8 @@ def test_appeal_dismissed_preserves_original_verdict_and_payout(client):
     contract.connect(carrier).submit_voyage_logs(
         args=[
             vid,
-            "https://marine-ais.org/voyage.json",
-            "https://marine-weather.org/buoy.json"
+            "https://marinetraffic.com/ais/voyage.json",
+            "https://noaa.gov/weather/buoy.json"
         ]
     )
 
@@ -76,7 +76,7 @@ def test_appeal_dismissed_preserves_original_verdict_and_payout(client):
         }
     )
     contract.connect(carrier).adjudicate_appeal(
-        args=[vid, "https://harbor-authority.org/imo9876543_log.txt"]
+        args=[vid, "https://portofrotterdam.com/imo9876543_log.txt"]
     )
 
     # 6. Verify status preserves FORCE_MAJEURE_EXCUSED, not demurrage
@@ -101,7 +101,7 @@ def test_appeal_rejects_unbound_vessel_evidence(client):
     vid = str(tx.return_value)
 
     contract.connect(carrier).submit_voyage_logs(
-        args=[vid, "https://ais.org/log.json", "https://weather.org/log.json"]
+        args=[vid, "https://marinetraffic.com/ais/log.json", "https://noaa.gov/weather/log.json"]
     )
 
     client.provider.make_request(
@@ -128,7 +128,7 @@ def test_appeal_rejects_unbound_vessel_evidence(client):
         value=120000000000000000
     )
 
-    # Web returns log for unrelated IMO9999999
+    # Web returns log for unrelated IMO9999999 from accredited domain
     client.provider.make_request(
         method="sim_installMocks",
         params={
@@ -138,9 +138,120 @@ def test_appeal_rejects_unbound_vessel_evidence(client):
 
     # Appeal is automatically dismissed due to IMO mismatch
     contract.connect(charterer).adjudicate_appeal(
-        args=[vid, "https://fake-marine.org/unrelated_ship.txt"]
+        args=[vid, "https://portofrotterdam.com/unrelated_ship.txt"]
     )
 
     v_after = json.loads(contract.get_voyage(args=[vid]).call())
     assert v_after["status"] == 4  # STATUS_SETTLED_DEMURRAGE preserved
     assert "Not bound to declared vessel IMO" in v_after["reason"]
+
+
+def test_appeal_rejects_unauthenticated_source_domain(client):
+    """STEWARD CORRECTION: Enforce that supplemental evidence URL must come from an accredited maritime domain."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    tx = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO5555555", 24, 200000000000000000, 100],
+        value=1200000000000000000
+    )
+    vid = str(tx.return_value)
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[vid, "https://marinetraffic.com/ais.json", "https://noaa.gov/weather.txt"]
+    )
+
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "DEMURRAGE_ENFORCED"})},
+            "web_mocks": {".*": {"status": 200, "body": "IMO5555555 CALM"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[vid])
+    contract.connect(carrier).appeal_verdict(args=[vid, "Appeal with arbitrary blog URL."], value=120000000000000000)
+
+    # Submitting evidence from unaccredited domain -> MUST REVERT
+    with pytest.raises(Exception, match="Evidence source unauthenticated"):
+        contract.connect(carrier).adjudicate_appeal(
+            args=[vid, "https://untrusted-blog.com/logs/cyclone_claim.pdf"]
+        )
+
+
+def test_appeal_rejects_contract_owner_adjudication(client):
+    """STEWARD CORRECTION: adjudicate_appeal strictly forbids the global contract owner (only charterer/carrier allowed)."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    tx = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO6666666", 24, 200000000000000000, 100],
+        value=1200000000000000000
+    )
+    vid = str(tx.return_value)
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[vid, "https://marinetraffic.com/ais.json", "https://noaa.gov/weather.txt"]
+    )
+
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "DEMURRAGE_ENFORCED"})},
+            "web_mocks": {".*": {"status": 200, "body": "IMO6666666 CALM"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[vid])
+    contract.connect(carrier).appeal_verdict(args=[vid, "Valid appeal."], value=120000000000000000)
+
+    # Global contract owner attempts to adjudicate -> MUST REVERT
+    # Set owner to independent account (accounts[2]) that is neither charterer nor carrier
+    contract.contract.owner = client.accounts[2].address
+    with pytest.raises(Exception, match="Permission Denied: Only charterer or carrier can adjudicate appeal"):
+        contract.connect(client.accounts[2]).adjudicate_appeal(
+            args=[vid, "https://noaa.gov/supplemental.txt"]
+        )
+
+
+def test_appeal_rejects_out_of_period_evidence(client):
+    """STEWARD CORRECTION: Supplemental evidence must be bound to the declared voyage period."""
+    contract = client.deploy("contracts/contract.py")
+    charterer = client.accounts[0]
+    carrier = client.accounts[1]
+
+    tx = contract.connect(charterer).create_voyage_escrow(
+        args=["IMO7777777", 24, 200000000000000000, 100],
+        value=1200000000000000000
+    )
+    vid = str(tx.return_value)
+
+    contract.connect(carrier).submit_voyage_logs(
+        args=[vid, "https://marinetraffic.com/ais.json", "https://noaa.gov/weather.txt"]
+    )
+
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "llm_mocks": {".*": json.dumps({"canary": "CANARY_AGENT_SHIP_MARITIME_V1", "verdict": "DEMURRAGE_ENFORCED"})},
+            "web_mocks": {".*": {"status": 200, "body": "IMO7777777 CALM"}}
+        }
+    )
+    contract.connect(carrier).adjudicate_demurrage(args=[vid])
+    contract.connect(carrier).appeal_verdict(args=[vid, "Submitting old storm report."], value=120000000000000000)
+
+    # Accredited source but contains out-of-period event
+    client.provider.make_request(
+        method="sim_installMocks",
+        params={
+            "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO7777777 STORM LOG: OUTSIDE VOYAGE PERIOD EXPIRED DATE"}}
+        }
+    )
+
+    contract.connect(carrier).adjudicate_appeal(
+        args=[vid, "https://noaa.gov/old_storm.txt"]
+    )
+
+    v_after = json.loads(contract.get_voyage(args=[vid]).call())
+    assert v_after["status"] == 4  # Settled Demurrage (appeal dismissed)
+    assert "falls outside declared voyage operating period" in v_after["reason"]

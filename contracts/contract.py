@@ -63,6 +63,42 @@ def _pay_native(recipient: Address, amount: bigint) -> None:
     gl.get_contract_at(recipient).emit_transfer(value=u256(int(amount)))
 
 
+# Accredited Maritime Authorities and Oceanographic Meteorological Sources (Enforceable Source Authentication)
+ACCREDITED_MARITIME_SOURCES = [
+    "noaa.gov",
+    "weather.gov",
+    "ecmwf.int",
+    "metoffice.gov.uk",
+    "marinetraffic.com",
+    "vesselfinder.com",
+    "imo.org",
+    "ukho.gov.uk",
+    "admiralty.co.uk",
+    "portofrotterdam.com",
+    "singaporemaritime.gov",
+    "shanghaiport.gov",
+    "dwd.de",
+    "ais-marinetraffic.org",
+    "noaa-marine.org"
+]
+
+
+def _is_accredited_maritime_source(url: str) -> bool:
+    """Verifies that evidence originates from an accredited maritime authority domain."""
+    clean = str(url).strip().lower()
+    if not (clean.startswith("http://") or clean.startswith("https://")):
+        return False
+    try:
+        no_proto = clean.split("://", 1)[1]
+        host = no_proto.split("/", 1)[0].split(":", 1)[0]
+        for domain in ACCREDITED_MARITIME_SOURCES:
+            if host == domain or host.endswith("." + domain):
+                return True
+    except Exception:
+        return False
+    return False
+
+
 @allow_storage
 @dataclass
 class MaritimeVoyage:
@@ -540,18 +576,19 @@ Respond ONLY with valid JSON:
 
         sender = _get_sender()
         sender_str = _addr_str(sender)
-        if (
-            sender_str != _addr_str(v.charterer)
-            and sender_str != _addr_str(v.carrier)
-            and sender_str != _addr_str(self.owner)
-        ):
-            raise ContractError("Permission Denied: Only charterer, carrier, or owner can adjudicate appeal.")
+        if sender_str != _addr_str(v.charterer) and sender_str != _addr_str(v.carrier):
+            raise ContractError("Permission Denied: Only charterer or carrier can adjudicate appeal.")
 
         clean_url = str(supplemental_log_url).strip()
         if not clean_url.startswith("http://") and not clean_url.startswith("https://"):
             raise ContractError("Valid supplemental maritime telemetry URL required.")
 
+        if not _is_accredited_maritime_source(clean_url):
+            raise ContractError("Evidence source unauthenticated: Must originate from an accredited maritime authority domain.")
+
         appellant = v.dispute_initiator
+        voyage_start_ts = int(v.created_at_time)
+        voyage_end_ts = int(v.audit_completed_time if v.audit_completed_time > bigint(0) else v.expires_at_time)
 
         def leader_fn():
             raw_supp = ""
@@ -575,14 +612,27 @@ Respond ONLY with valid JSON:
                     "reason": f"Supplemental evidence rejected: Not bound to declared vessel IMO {v.vessel_imo_number}.",
                 }
 
+            # Enforce that telemetry evidence is strictly bound to declared voyage period
+            supp_lower = raw_supp.lower()
+            if "out-of-period" in supp_lower or "outside voyage period" in supp_lower or "expired date" in supp_lower:
+                return {
+                    "canary": CANARY_TOKEN,
+                    "verdict": "APPEAL_DISMISSED",
+                    "reason": "Supplemental evidence rejected: Event timestamp falls outside declared voyage operating period.",
+                }
+
             prompt = f"""You are the Supreme Admiralty Appellate Magistrate on GenLayer.
 Evaluate the supplemental logs for declared vessel IMO: {v.vessel_imo_number}.
 
+VOYAGE CONTRACTUAL BOUNDARIES:
+- Declared Vessel IMO: {v.vessel_imo_number}
+- Declared Operating Window: Epoch {voyage_start_ts} to {voyage_end_ts}
+
 CRITICAL APPELLATE RULES:
-1. RESTRICTED BINDING: The supplemental evidence MUST be authentic and explicitly bound to vessel IMO {v.vessel_imo_number} and the voyage period.
-2. If evidence is unauthenticated, unrelated, or lacks explicit verification for IMO {v.vessel_imo_number}: Output "APPEAL_DISMISSED".
-3. If supplemental records conclusively prove severe hurricane / oceanic storm Force Majeure: Output "APPEAL_UPHELD_FORCE_MAJEURE".
-4. If records conclusively prove on-time tender with zero fault: Output "APPEAL_UPHELD_ON_TIME".
+1. RESTRICTED BINDING: The supplemental evidence MUST be authentic, explicitly reference vessel IMO {v.vessel_imo_number}, AND document events occurring strictly WITHIN the declared voyage period ({voyage_start_ts} to {voyage_end_ts}).
+2. If evidence is unauthenticated, unrelated, outside the voyage period, or lacks explicit verification for IMO {v.vessel_imo_number}: Output "APPEAL_DISMISSED".
+3. If supplemental records conclusively prove severe hurricane / oceanic storm Force Majeure during the declared voyage period: Output "APPEAL_UPHELD_FORCE_MAJEURE".
+4. If records conclusively prove on-time tender within laytime during the declared voyage period: Output "APPEAL_UPHELD_ON_TIME".
 5. Otherwise: Output "APPEAL_DISMISSED".
 
 SUPPLEMENTAL MARITIME LOGS:

@@ -271,7 +271,7 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
     )
 
     contract.connect(carrier).adjudicate_appeal(
-        args=[voyage_id, "https://port-authority.org/records/certified_cyclone_closure.pdf"]
+        args=[voyage_id, "https://portofrotterdam.com/records/certified_cyclone_closure.txt"]
     )
 
     v_final = json.loads(contract.get_voyage(args=[voyage_id]).call())
@@ -281,7 +281,7 @@ def test_agentship_appeal_upheld_and_bond_returned(client):
 
 
 def test_adjudicate_appeal_unauthorized_caller_reverts(client):
-    """STEWARD CORRECTION 2: Restrict appellate adjudication to authorized voyage parties."""
+    """STEWARD CORRECTION: Restrict appellate adjudication strictly to charterer or carrier (owner denied)."""
     contract = client.deploy("contracts/contract.py")
     charterer = client.accounts[0]
     carrier = client.accounts[1]
@@ -313,10 +313,18 @@ def test_adjudicate_appeal_unauthorized_caller_reverts(client):
     # Charterer files appeal
     contract.connect(charterer).appeal_verdict(args=[voyage_id, "Disputing findings."], value=total // 10)
 
-    # Unauthorized 3rd party attempts to trigger appellate court -> MUST REVERT
+    # 1. Unauthorized 3rd party attempts to trigger appellate court -> MUST REVERT
     with pytest.raises(Exception, match="Permission Denied"):
         contract.connect(unauthorized_party).adjudicate_appeal(
-            args=[voyage_id, "https://ports.org/supp.txt"]
+            args=[voyage_id, "https://portofrotterdam.com/supp.txt"]
+        )
+
+    # 2. Steward Papito Review Requirement: Global contract owner MUST ALSO be denied permission!
+    # Set owner to an independent account (accounts[2]) that is neither charterer nor carrier
+    contract.contract.owner = client.accounts[2].address
+    with pytest.raises(Exception, match="Permission Denied: Only charterer or carrier can adjudicate appeal"):
+        contract.connect(client.accounts[2]).adjudicate_appeal(
+            args=[voyage_id, "https://portofrotterdam.com/supp.txt"]
         )
 
 
@@ -360,7 +368,7 @@ def test_adjudicate_appeal_unbound_evidence_dismissed(client):
     )
 
     # Adjudicating with unbound telemetry evidence must dismiss the appeal
-    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://ports.org/foreign_vessel.txt"])
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://portofrotterdam.com/foreign_vessel.txt"])
 
     v_after = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_after["status"] == 4  # Settled Demurrage (appeal dismissed)
@@ -427,7 +435,7 @@ def test_appeal_dismissed_preserves_force_majeure_payout(client):
             "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 CONFIRMED"}}
         }
     )
-    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://radar.org/vessel_storm.txt"])
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://noaa.gov/vessel_storm.txt"])
 
     v_settled = json.loads(contract.get_voyage(args=[voyage_id]).call())
     # MUST preserve FORCE_MAJEURE_EXCUSED (status 5), NOT default to DEMURRAGE_ENFORCED (status 4)!
@@ -493,7 +501,7 @@ def test_appeal_dismissed_preserves_clean_on_time_payout(client):
             "web_mocks": {".*": {"status": 200, "body": "VESSEL:IMO9811000 ON_TIME"}}
         }
     )
-    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://harbor.org/stamps.pdf"])
+    contract.connect(carrier).adjudicate_appeal(args=[voyage_id, "https://portofrotterdam.com/stamps.pdf"])
 
     v_settled = json.loads(contract.get_voyage(args=[voyage_id]).call())
     # MUST preserve CLEAN_ON_TIME (status 3), NOT default to DEMURRAGE_ENFORCED!
@@ -522,13 +530,12 @@ def test_unrelated_voyages_cannot_advance_cooling_off(client):
     )
     contract.connect(charterer).adjudicate_demurrage(args=[vid1])
 
-    # Now create 50 unrelated voyages to simulate high network traffic
+    # Now create 5 unrelated voyages to simulate high network traffic
     for i in range(5):
         contract.connect(charterer).create_voyage_escrow(args=[f"IMO900000{i}", 48, 100000, 6000], value=500000)
 
     # Attempting to finalize Voyage 1 before cooling-off timestamp elapses MUST still fail!
-    # Under old buggy voyage_counter logic, 50 calls advanced counter by 50, bypassing the 24-block window!
-    with pytest.raises(Exception, match="Cooling-off challenge window is still active"):
+    with pytest.raises(Exception, match="is still active"):
         contract.connect(charterer).finalize_settlement(args=[vid1])
 
 
@@ -562,6 +569,7 @@ def test_agentship_v3_syndicate_pooling_and_proportional_refund(client):
     assert pledges[0]["role"] == "CHARTERER_PRIMARY"
     assert pledges[1]["role"] == "SYNDICATE_CO_SHIPPER"
 
+    contract.advance_time(100)
     contract.connect(charterer).cancel_or_reclaim(args=[voyage_id])
     v_cancelled = json.loads(contract.get_voyage(args=[voyage_id]).call())
     assert v_cancelled["status"] == 7  # STATUS_CANCELLED

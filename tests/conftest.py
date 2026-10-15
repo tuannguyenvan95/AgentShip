@@ -1,6 +1,9 @@
 import pytest
 import json
 import hashlib
+import sys
+import os
+import types
 from pathlib import Path
 
 CONTRACTS_DIR = Path(__file__).parent.parent / "contracts"
@@ -12,6 +15,36 @@ def contract_source() -> str:
     """Load the AgentShip intelligent contract source code."""
     with open(CONTRACT_PATH, "r", encoding="utf-8") as f:
         return f.read()
+
+
+# ── GENVM RUNTIME ENVIRONMENT SETUP ─────────────────────────────────
+# Setup execution primitives so the SUBMITTED CONTRACT can be imported and executed directly.
+
+class MockAddress(str):
+    @property
+    def as_hex(self) -> str:
+        return str(self)
+
+    def lower(self) -> str:
+        return str(self).lower()
+
+
+class MockBigInt(int):
+    pass
+
+
+class MockContractRecipient:
+    def __init__(self, address, transfer_log):
+        self.address = address
+        self.transfer_log = transfer_log
+
+    def emit_transfer(self, value):
+        self.transfer_log.append({"to": str(self.address), "value": int(value)})
+
+
+class MockReturn:
+    def __init__(self, calldata):
+        self.calldata = calldata
 
 
 class _MockCallResult:
@@ -27,349 +60,205 @@ class _MockTxResult:
         self.return_value = return_value
 
 
-class _MockSimContract:
-    def __init__(self, sim_client, contract_path):
-        self.client = sim_client
-        self.contract_path = contract_path
-        self.voyages = {}
-        self.voyage_ids = []
-        self.voyage_counter = 0
-        self.caller = sim_client.accounts[0]
-        self.owner = sim_client.accounts[0]
-        self.total_maritime_locked = 0
-        self.total_voyages_settled = 0
-        self.reputation_scores = {}
-        self.stats_completed = {}
-        self.stats_force_majeure = {}
-        self.stats_demurrage_fault = {}
-        self.stats_appeals_won = {}
-        self.stats_appeals_lost = {}
-        self.registered_participants = []
-        self.syndicate_pledges = {}
-        self.mock_current_time = 1760000000
+class MockGL:
+    class Contract:
+        pass
+
+    class public:
+        @staticmethod
+        def view(fn): return fn
+        @staticmethod
+        def write(fn): return fn
+
+    class message:
+        sender_address = MockAddress("0x1111111111111111111111111111111111111111")
+        sender = MockAddress("0x1111111111111111111111111111111111111111")
+        value = MockBigInt(0)
+
+    class nondet:
+        class web:
+            @staticmethod
+            def render(url, mode="text"):
+                return ""
+
+        @staticmethod
+        def exec_prompt(prompt, response_format="json"):
+            return ""
+
+    class vm:
+        Return = MockReturn
+
+        @staticmethod
+        def run_nondet(leader_fn, validator_fn):
+            res = leader_fn()
+            ret = MockReturn(calldata=res)
+            if not validator_fn(ret):
+                raise Exception("Consensus disagreement")
+            return res
+
+    def __init__(self):
+        self.transfers = []
+        self.message_raw = {"datetime": "2026-10-15T12:00:00+00:00"}
+        self.provider = None
+
+    def get_contract_at(self, address):
+        return MockContractRecipient(address, self.transfers)
+
+    def get_web_page(self, url):
+        return self.nondet.web.render(url)
+
+    def exec_prompt(self, prompt):
+        return self.nondet.exec_prompt(prompt)
+
+
+# Install genlayer into sys.modules
+mock_gl_inst = MockGL()
+mock_gl_mod = types.ModuleType("genlayer")
+mock_gl_mod.gl = mock_gl_inst
+MockGL.public.write.payable = staticmethod(lambda fn: fn)
+
+mock_gl_mod.Address = MockAddress
+mock_gl_mod.bigint = MockBigInt
+for t_name in ["u8", "u16", "u32", "u64", "u128", "u256"]:
+    setattr(mock_gl_mod, t_name, MockBigInt)
+mock_gl_mod.TreeMap = dict
+mock_gl_mod.DynArray = list
+mock_gl_mod.allow_storage = lambda cls: cls
+
+sys.modules["genlayer"] = mock_gl_mod
+
+# Import the SUBMITTED CONTRACT directly from contracts/contract.py!
+sys.path.insert(0, str(CONTRACTS_DIR))
+import contract as submitted_contract_module
+SubmittedContractClass = submitted_contract_module.Contract
+
+
+class DeployedContractWrapper:
+    """Executes behavioral tests directly against the SUBMITTED CONTRACT class (SubmittedContractClass)."""
+    def __init__(self, contract_inst, client):
+        self.contract = contract_inst
+        self.client = client
+        self.current_caller = client.accounts[0]
 
     def connect(self, account):
-        self.caller = account.address if hasattr(account, "address") else str(account)
+        self.current_caller = account
         return self
 
-    def _touch_participant(self, addr):
-        a = str(addr).lower()
-        if a not in self.registered_participants:
-            self.registered_participants.append(a)
-        if a not in self.reputation_scores:
-            self.reputation_scores[a] = 10
+    def advance_time(self, seconds: int):
+        from datetime import datetime, timezone, timedelta
+        dt_str = str(mock_gl_inst.message_raw.get("datetime", "2026-10-15T12:00:00+00:00"))
+        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        new_dt = dt + timedelta(seconds=seconds)
+        mock_gl_inst.message_raw["datetime"] = new_dt.isoformat()
 
-    def _add_reputation(self, addr, points):
-        a = str(addr).lower()
-        self._touch_participant(a)
-        self.reputation_scores[a] = max(0, self.reputation_scores.get(a, 10) + points)
+    def _prepare_call(self, value=0):
+        addr_str = self.current_caller.address if hasattr(self.current_caller, "address") else str(self.current_caller)
+        mock_gl_inst.message.sender_address = MockAddress(addr_str)
+        mock_gl_inst.message.sender = MockAddress(addr_str)
+        mock_gl_inst.message.value = MockBigInt(value)
 
-    def _get_tier(self, addr):
-        score = self.reputation_scores.get(str(addr).lower(), 10)
-        if score >= 100:
-            return "PLATINUM_ADMIRALTY_MASTER"
-        elif score >= 50:
-            return "GOLD_ESTABLISHED"
-        elif score >= 20:
-            return "SILVER_VERIFIED"
-        return "BRONZE_NEWCOMER"
+        # Wire client provider mocks into gl.nondet
+        if hasattr(self.client, "provider"):
+            web_mocks = getattr(self.client.provider, "web_mocks", {})
+            llm_mocks = getattr(self.client.provider, "llm_mocks", {})
+
+            def mock_render(url, mode="text"):
+                for pat, val in web_mocks.items():
+                    if pat == ".*" or pat in url or url in pat:
+                        return val.get("body", "") if isinstance(val, dict) else str(val)
+                return f"TELEMETRY: {url}"
+
+            def mock_exec_prompt(prompt, response_format="json"):
+                for pat, val in llm_mocks.items():
+                    return val
+                return json.dumps({
+                    "canary": "CANARY_AGENT_SHIP_MARITIME_V1",
+                    "verdict": "CLEAN_ON_TIME",
+                    "confidence": 95,
+                    "measured_delay_hours": 0,
+                    "max_wave_height_meters": 1,
+                    "reason": "Default telemetry verification successful."
+                })
+
+            mock_gl_inst.nondet.web.render = staticmethod(mock_render)
+            mock_gl_inst.nondet.exec_prompt = staticmethod(mock_exec_prompt)
 
     def create_voyage_escrow(self, args, value=0):
-        self.voyage_counter += 1
-        vid = str(self.voyage_counter)
-        vessel_imo, laytime_hours, demurrage_buffer, duration_blocks = args
-
-        freight = value - demurrage_buffer
-        caller_str = str(self.caller).lower()
-        self._touch_participant(caller_str)
-        self.total_maritime_locked += value
-
-        self.voyages[vid] = {
-            "voyage_id": vid,
-            "charterer": caller_str,
-            "carrier": "0x0000000000000000000000000000000000000000",
-            "dispute_initiator": "0x0000000000000000000000000000000000000000",
-            "freight_amount": str(freight),
-            "demurrage_deposit": str(demurrage_buffer),
-            "dispute_bond": "0",
-            "vessel_imo_number": vessel_imo,
-            "laytime_hours_allowed": laytime_hours,
-            "ais_tracking_url": "",
-            "marine_weather_url": "",
-            "evidence_hash": "",
-            "status": 0,  # STATUS_VOYAGE_OPEN
-            "verdict": "PENDING",
-            "original_verdict": "PENDING",
-            "reason": "Escrow opened.",
-            "confidence": 0,
-            "measured_delay_hours": 0,
-            "max_wave_height_meters": 0,
-            "created_at_time": str(self.mock_current_time),
-            "expires_at_time": str(self.mock_current_time + 86400 * 7),
-            "audit_completed_time": "0",
-            "created_at_block": str(self.mock_current_time),
-            "expires_at_block": str(self.mock_current_time + 86400 * 7),
-            "audit_completed_block": "0",
-            "is_fast_track": False,
-            "co_funder_count": 1,
-        }
-        self.voyage_ids.append(vid)
-
-        self.syndicate_pledges[vid] = [{
-            "funder": caller_str,
-            "amount": str(value),
-            "role": "CHARTERER_PRIMARY"
-        }]
-
-        return _MockTxResult(vid)
+        self._prepare_call(value)
+        v_imo, laytime, demurrage_buf, dur_blocks = args
+        ret = self.contract.create_voyage_escrow(
+            str(v_imo),
+            MockBigInt(laytime),
+            MockBigInt(demurrage_buf),
+            MockBigInt(dur_blocks)
+        )
+        return _MockTxResult(ret)
 
     def pledge_voyage_escrow(self, args, value=0):
+        self._prepare_call(value)
         vid = str(args[0])
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        self._touch_participant(caller_str)
-        v["freight_amount"] = str(int(v["freight_amount"]) + value)
-        v["co_funder_count"] += 1
-        self.total_maritime_locked += value
-        if vid not in self.syndicate_pledges:
-            self.syndicate_pledges[vid] = []
-        self.syndicate_pledges[vid].append({
-            "funder": caller_str,
-            "amount": str(value),
-            "role": "SYNDICATE_CO_SHIPPER"
-        })
-        return _MockTxResult(None)
+        ret = self.contract.pledge_voyage_escrow(vid)
+        return _MockTxResult(ret)
 
     def submit_voyage_logs(self, args):
-        vid = str(args[0])
-        ais_url, weather_url = args[1], args[2]
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        if caller_str == v["charterer"].lower():
-            raise Exception("Role Violation: Charterer cannot act as vessel carrier.")
-        self._touch_participant(caller_str)
-        v["carrier"] = caller_str
-        v["ais_tracking_url"] = ais_url
-        v["marine_weather_url"] = weather_url
-        v["status"] = 1  # STATUS_IN_TRANSIT
-        v["reason"] = "Voyage active. Telemetry linked."
-        return _MockTxResult(None)
+        self._prepare_call(0)
+        vid, ais_url, weather_url = args
+        ret = self.contract.submit_voyage_logs(str(vid), str(ais_url), str(weather_url))
+        return _MockTxResult(ret)
 
     def adjudicate_demurrage(self, args):
+        self._prepare_call(0)
         vid = str(args[0])
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
-            raise Exception("Permission Denied: Only charterer, carrier, or owner can trigger adjudication.")
-
-        web_mocks = self.client.provider.web_mocks
-        llm_mocks = self.client.provider.llm_mocks
-
-        combined_raw = f"AIS:{v['ais_tracking_url']}\nWEATHER:{v['marine_weather_url']}"
-        for _, val in web_mocks.items():
-            if isinstance(val, dict) and "body" in val:
-                combined_raw += f"\n{val['body']}"
-
-        evidence_hash = hashlib.sha256(combined_raw.encode("utf-8")).hexdigest()
-        v["evidence_hash"] = evidence_hash
-
-        verdict = "DEMURRAGE_ENFORCED"
-        confidence = 90
-        delay = 24
-        waves = 2
-        reason = "Maritime adjudication completed."
-
-        if llm_mocks:
-            for _, resp in llm_mocks.items():
-                parsed = json.loads(resp)
-                verdict = parsed.get("verdict", verdict)
-                confidence = parsed.get("confidence", confidence)
-                delay = parsed.get("measured_delay_hours", delay)
-                waves = parsed.get("max_wave_height_meters", waves)
-                reason = parsed.get("reason", reason)
-                break
-
-        v["verdict"] = verdict
-        v["original_verdict"] = verdict
-        v["confidence"] = confidence
-        v["measured_delay_hours"] = delay
-        v["max_wave_height_meters"] = waves
-        v["reason"] = reason
-        v["status"] = 2  # STATUS_AWAITING_PAYOUT
-        v["audit_completed_time"] = str(self.mock_current_time)
-        v["audit_completed_block"] = str(self.mock_current_time)
-        return _MockTxResult(None)
+        ret = self.contract.adjudicate_demurrage(str(vid))
+        return _MockTxResult(ret)
 
     def appeal_verdict(self, args, value=0):
-        vid = str(args[0])
-        dispute_reason = args[1]
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        if caller_str != v["charterer"].lower() and caller_str != v["carrier"].lower():
-            raise Exception("Role Violation: Only charterer or carrier can file an appeal.")
-
-        # Cooling off check
-        if self.mock_current_time > int(v["audit_completed_time"]) + 86400:
-            raise Exception("Dispute cooling-off window has expired.")
-
-        v["status"] = 6  # STATUS_DISPUTED
-        v["dispute_initiator"] = caller_str
-        v["dispute_bond"] = str(value)
-        self.total_maritime_locked += value
-        return _MockTxResult(None)
+        self._prepare_call(value)
+        vid, dispute_reason = args
+        ret = self.contract.appeal_verdict(str(vid), str(dispute_reason))
+        return _MockTxResult(ret)
 
     def adjudicate_appeal(self, args):
-        vid = str(args[0])
-        supp_url = args[1]
-        v = self.voyages[vid]
-
-        # Steward Requirement 2: Restrict appellate adjudication caller
-        caller_str = str(self.caller).lower()
-        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
-            raise Exception("Permission Denied: Only charterer, carrier, or owner can adjudicate appeal.")
-
-        # Steward Requirement 2: Verify supplemental evidence bound to declared vessel IMO
-        web_mocks = self.client.provider.web_mocks
-        supp_content = ""
-        for _, val in web_mocks.items():
-            if isinstance(val, dict) and "body" in val:
-                supp_content += str(val["body"])
-
-        llm_mocks = self.client.provider.llm_mocks
-        verdict = "APPEAL_DISMISSED"
-        reason = "Appeal dismissed."
-
-        # If supplemental log does not contain vessel IMO, dismiss appeal
-        if v["vessel_imo_number"].lower() not in supp_content.lower() and supp_content:
-            verdict = "APPEAL_DISMISSED"
-            reason = f"Supplemental evidence rejected: Not bound to declared vessel IMO {v['vessel_imo_number']}."
-        elif llm_mocks:
-            for _, resp in llm_mocks.items():
-                parsed = json.loads(resp)
-                verdict = parsed.get("verdict", verdict)
-                reason = parsed.get("reason", reason)
-                break
-
-        bond_val = int(v["dispute_bond"])
-        v["dispute_bond"] = "0"
-        v["freight_amount"] = "0"
-        v["demurrage_deposit"] = "0"
-        self.total_voyages_settled += 1
-
-        if verdict == "APPEAL_UPHELD_FORCE_MAJEURE":
-            v["status"] = 5  # STATUS_SETTLED_FORCE_MAJEURE
-            v["verdict"] = "FORCE_MAJEURE_EXCUSED"
-            v["reason"] = f"[APPEAL UPHELD] {reason}"
-            self._add_reputation(v["dispute_initiator"], 15)
-        elif verdict == "APPEAL_UPHELD_ON_TIME":
-            v["status"] = 3  # STATUS_SETTLED_ON_TIME
-            v["verdict"] = "CLEAN_ON_TIME"
-            v["reason"] = f"[APPEAL UPHELD] {reason}"
-            self._add_reputation(v["dispute_initiator"], 15)
-        else:
-            # Steward Requirement 3: Preserve original verdict and payout when appeal dismissed!
-            orig = v.get("original_verdict", "DEMURRAGE_ENFORCED")
-            if orig == "FORCE_MAJEURE_EXCUSED":
-                v["status"] = 5  # STATUS_SETTLED_FORCE_MAJEURE
-                v["verdict"] = "FORCE_MAJEURE_EXCUSED"
-            elif orig == "CLEAN_ON_TIME":
-                v["status"] = 3  # STATUS_SETTLED_ON_TIME
-                v["verdict"] = "CLEAN_ON_TIME"
-            else:
-                v["status"] = 4  # STATUS_SETTLED_DEMURRAGE
-                v["verdict"] = "DEMURRAGE_ENFORCED"
-            v["reason"] = f"[APPEAL DISMISSED - ORIGINAL VERDICT PRESERVED] {reason}"
-            self._add_reputation(v["dispute_initiator"], -15)
-
-        return _MockTxResult(None)
+        self._prepare_call(0)
+        vid, supp_url = args
+        ret = self.contract.adjudicate_appeal(str(vid), str(supp_url))
+        return _MockTxResult(ret)
 
     def finalize_settlement(self, args):
+        self._prepare_call(0)
         vid = str(args[0])
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        if caller_str not in [v["charterer"].lower(), v["carrier"].lower(), str(self.owner).lower()]:
-            raise Exception("Permission Denied: Only voyage stakeholders can finalize payout.")
-
-        # Cooling off check (24h = 86400s)
-        if self.mock_current_time <= int(v["audit_completed_time"]) + (43200 if v.get("is_fast_track") else 86400):
-            raise Exception("Cooling-off challenge window is still active.")
-
-        if v["verdict"] == "FORCE_MAJEURE_EXCUSED":
-            v["status"] = 5
-        elif v["verdict"] == "CLEAN_ON_TIME":
-            v["status"] = 3
-        else:
-            v["status"] = 4
-        self.total_voyages_settled += 1
-        return _MockTxResult(None)
+        ret = self.contract.finalize_settlement(str(vid))
+        return _MockTxResult(ret)
 
     def cancel_or_reclaim(self, args):
+        self._prepare_call(0)
         vid = str(args[0])
-        v = self.voyages[vid]
-        caller_str = str(self.caller).lower()
-        if caller_str != v["charterer"].lower():
-            raise Exception("Role Violation: Only the charterer can cancel or reclaim booking.")
-        v["status"] = 7  # STATUS_CANCELLED
-        v["verdict"] = "CANCELLED"
-        v["reason"] = "Voyage cancelled and escrow refunded."
-        return _MockTxResult(None)
+        ret = self.contract.cancel_or_reclaim(str(vid))
+        return _MockTxResult(ret)
 
     def get_voyage(self, args):
         vid = str(args[0])
-        return _MockCallResult(json.dumps(self.voyages[vid]))
+        return _MockCallResult(self.contract.get_voyage(vid))
 
     def get_voyage_count(self, args=None):
-        return _MockCallResult(len(self.voyage_ids))
+        return _MockCallResult(int(self.contract.get_voyage_count()))
 
     def get_all_voyages(self, args=None):
-        lst = [self.voyages[vid] for vid in self.voyage_ids]
-        return _MockCallResult(json.dumps(lst))
+        return _MockCallResult(self.contract.get_all_voyages())
 
     def get_stats(self, args=None):
-        data = {
-            "total_voyages": len(self.voyage_ids),
-            "total_maritime_locked": str(self.total_maritime_locked),
-            "total_voyages_settled": self.total_voyages_settled,
-            "registered_participants": len(self.registered_participants),
-            "owner": str(self.owner),
-        }
-        return _MockCallResult(json.dumps(data))
+        return _MockCallResult(self.contract.get_stats())
 
     def get_reputation_profile(self, args):
-        u_addr = str(args[0]).lower()
-        score = self.reputation_scores.get(u_addr, 10)
-        tier = self._get_tier(u_addr)
-        is_fast = tier in ["GOLD_ESTABLISHED", "PLATINUM_ADMIRALTY_MASTER"]
-        dossier = {
-            "address": u_addr,
-            "reputation_score": score,
-            "tier": tier,
-            "is_fast_track_eligible": is_fast,
-            "cooling_off_seconds": 43200 if is_fast else 86400,
-            "cooling_off_blocks": 12 if is_fast else 24,
-            "completed_voyages": self.stats_completed.get(u_addr, 0),
-            "force_majeure_weather_verified": self.stats_force_majeure.get(u_addr, 0),
-            "demurrage_faults": self.stats_demurrage_fault.get(u_addr, 0),
-            "appeals_won": self.stats_appeals_won.get(u_addr, 0),
-            "appeals_lost": self.stats_appeals_lost.get(u_addr, 0),
-        }
-        return _MockCallResult(json.dumps(dossier))
+        u_addr = args[0]
+        return _MockCallResult(self.contract.get_reputation_profile(MockAddress(str(u_addr))))
 
     def get_maritime_leaderboard(self, args=None):
-        board = []
-        for reg in self.registered_participants:
-            board.append({
-                "address": reg,
-                "score": self.reputation_scores.get(reg, 10),
-                "tier": self._get_tier(reg),
-                "completed": self.stats_completed.get(reg, 0),
-            })
-        board.sort(key=lambda x: x["score"], reverse=True)
-        return _MockCallResult(json.dumps(board))
+        return _MockCallResult(self.contract.get_maritime_leaderboard())
 
     def get_voyage_pledges(self, args):
         vid = str(args[0])
-        return _MockCallResult(json.dumps(self.syndicate_pledges.get(vid, [])))
+        return _MockCallResult(self.contract.get_voyage_pledges(vid))
 
 
 class _MockAccount:
@@ -390,7 +279,7 @@ class _MockProvider:
         return None
 
 
-class _MockSimClient:
+class _SimClient:
     def __init__(self):
         self.accounts = [
             _MockAccount("0x1111111111111111111111111111111111111111"),
@@ -401,17 +290,22 @@ class _MockSimClient:
         self.provider = _MockProvider()
 
     def deploy(self, contract_path):
-        return _MockSimContract(self, contract_path)
+        inst = SubmittedContractClass()
+        # Initialize GenVM storage structures
+        inst.voyages = {}
+        inst.voyage_ids = []
+        inst.reputation_scores = {}
+        inst.stats_completed = {}
+        inst.stats_force_majeure = {}
+        inst.stats_demurrage_fault = {}
+        inst.stats_appeals_won = {}
+        inst.stats_appeals_lost = {}
+        inst.registered_registry = {}
+        inst.syndicate_pledges_json = {}
+        return DeployedContractWrapper(inst, self)
 
 
 @pytest.fixture
 def client():
-    """Provides a client instance for contract testing (supports local simulation and gltest)."""
-    try:
-        from gltest.fixtures import get_gl_client
-        c = get_gl_client()
-        if c is not None and hasattr(c, "deploy"):
-            return c
-    except Exception:
-        pass
-    return _MockSimClient()
+    """Provides a client instance for executing behavioral tests against the SUBMITTED CONTRACT directly."""
+    return _SimClient()
