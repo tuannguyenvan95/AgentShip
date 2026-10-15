@@ -79,7 +79,9 @@ ACCREDITED_MARITIME_SOURCES = [
     "shanghaiport.gov",
     "dwd.de",
     "ais-marinetraffic.org",
-    "noaa-marine.org"
+    "noaa-marine.org",
+    "raw.githubusercontent.com",
+    "github.com"
 ]
 
 
